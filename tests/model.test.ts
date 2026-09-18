@@ -318,7 +318,8 @@ describe("persistence and renames", () => {
 describe("migration from the pywebview app", () => {
   it("loads what scripts/migrate_state.py writes", async () => {
     const fs = await import("fs");
-    const raw = JSON.parse(fs.readFileSync(new URL("./fixtures/migrated.json", import.meta.url), "utf8"));
+    const path = await import("path");
+    const raw = JSON.parse(fs.readFileSync(path.join(__dirname, "fixtures/migrated.json"), "utf8"));
     const store = new Store(upgrade(raw.store), () => {});
     expect(store.domains().map((d) => d.name)).toEqual(["School", "Life Admin"]);
     const school = store.domains()[0].id;

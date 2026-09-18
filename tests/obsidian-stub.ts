@@ -3,9 +3,26 @@
  * stubbed for vitest. Views are never instantiated in tests.
  */
 
+export class Component {
+  registerDomEvent(): unknown {
+    return {};
+  }
+  registerEvent(): unknown {
+    return {};
+  }
+}
+
 export class Plugin {}
-export class ItemView {}
-export class Modal {}
+export class ItemView extends Component {
+  contentEl: HTMLElement = document.createElement("div");
+  navigation = true;
+}
+export class Modal {
+  modalEl: HTMLElement = document.createElement("div");
+  contentEl: HTMLElement = document.createElement("div");
+  open(): void {}
+  close(): void {}
+}
 export class SuggestModal<T> {
   items: T[] = [];
 }

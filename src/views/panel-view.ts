@@ -36,7 +36,6 @@ export class PanelView extends ItemView {
   private domainOpen: Record<string, true> = {};
   private priorityOpen: Record<string, true> = {};
   sectionsEl: HTMLElement | null = null;
-  dossier: HTMLElement | null = null;
   private dossierRenderer: DossierRenderer | null = null;
   private els: {
     stats: HTMLElement;
@@ -98,7 +97,6 @@ export class PanelView extends ItemView {
     this.unsubscribe?.();
     this.unsubscribe = null;
     this.els = null;
-    this.dossier = null;
     this.sectionsEl = null;
     this.dossierRenderer = null;
     this.contentEl.empty();
@@ -266,7 +264,7 @@ export class PanelView extends ItemView {
       return;
     }
     this.contentEl.removeClass("zoomin-focusing");
-    this.dossier?.hide();
+    this.dossierRenderer?.hide();
     this.sectionsEl?.show();
     const stats = this.plugin.model.payload().stats;
     this.els.stats.setText(`${stats.notes} notes · ${stats.links} links · ${stats.phantoms} unwritten`);
@@ -434,6 +432,7 @@ export class PanelView extends ItemView {
     const model = this.plugin.model;
     const projects = model.projects();
     const domains = model.domains();
+    const slotted = model.priorities().projects;
     const unassigned = projects.filter((p) => !p.domainId);
     const visible: ProjectView[] = this.projectFilter === "none" ? unassigned : projects;
     const filtering = this.projectFilter !== "all";
@@ -459,6 +458,7 @@ export class PanelView extends ItemView {
         tag: owner ? this.inheritedTag(project, owner.name) : null,
         count: project.size ? String(project.size) : "",
         onLabelClick: () => this.plugin.zoomToNote(project.path),
+        controls: [this.starButton("project", project.path, slotted.includes(project.path))],
       });
 
       const field = el("div", "zoomin-assign");
@@ -519,6 +519,12 @@ class DossierRenderer {
   } | null = null;
 
   constructor(private readonly panel: PanelView) {}
+
+  /** Leaving the lens: the dossier goes away entirely, not just the sections
+   *  coming back — it is a mode, not a section that waits below the fold. */
+  hide(): void {
+    this.dossierEl?.root.hide();
+  }
 
   render(id: string): void {
     const plugin = this.panel.plugin;
