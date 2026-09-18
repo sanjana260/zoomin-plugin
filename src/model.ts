@@ -16,6 +16,9 @@
 
 import { DOMAIN_HUES, Member, buildPayload, domainMembers, effectiveDomain, shapeIndex, shapeOf } from "./graph/build";
 import { Hierarchy, TreeNode, buildHierarchy } from "./graph/hierarchy";
+import { RowBuilder, applyOrder, deadlinePaths, domainTaskPaths, exploringTasksUnder, stableShuffle, todayIso } from "./graph/tasks";
+import type { TaskRow } from "./graph/tasks";
+export type { TaskRow };
 import { Store } from "./state/store";
 import { Datatype, GraphPayload, LinkKind, Positions, STATUSES, Status, VaultSnapshot, fold } from "./types";
 import { categoryNames } from "./vault/categories";
@@ -55,6 +58,18 @@ export interface CategoryView {
   inFolder: boolean;
   shape: string | null;
   project: boolean;
+}
+
+export interface FocusBox {
+  project: { path: string; label: string; hue: number | null; domainName: string | null };
+  tasks: TaskRow[];
+}
+
+export interface TasksModelView {
+  today: string;
+  focus: FocusBox[];
+  domains: TaskRow[];
+  deadlines: TaskRow[];
 }
 
 export interface PrioritiesView {
@@ -430,6 +445,65 @@ export class ZoomInModel {
       this.store.clearSlot(kind, key);
     }
     this.emit(false);
+  }
+
+  /**
+   * The dashboard: focus, priority-domain tasks, and the deadline feed.
+   *
+   * Focus and the domain list carry the user's manual order first and the
+   * remainder after it; the deadline feed is the calendar's order and has no
+   * manual layer. `today` is the caller's clock — pass `new Date()`; a view
+   * that stays open past midnight re-asks.
+   */
+  tasks(today: Date): TasksModelView {
+    const priorities = this.store.priorities();
+    const assignments = this.store.assignments();
+    const domains = this.store.domains();
+    const builder = new RowBuilder(this.snapshot, this.hierarchy, domains, assignments, this.store.datatypes());
+    const byId = new Map(domains.map((d) => [d.id, d]));
+
+    const focus: FocusBox[] = [];
+    for (const projectPath of priorities.projects) {
+      const project = this.snapshot.notes.get(projectPath);
+      if (!project) continue;
+      const paths = applyOrder(
+        exploringTasksUnder(this.snapshot, this.hierarchy, projectPath),
+        this.store.taskOrder(`focus:${projectPath}`),
+      );
+      const [domainId, hue] = builder.hue(projectPath);
+      focus.push({
+        project: {
+          path: projectPath,
+          label: project.title,
+          hue,
+          domainName: domainId !== null ? byId.get(domainId)?.name ?? null : null,
+        },
+        tasks: paths.map((p) => builder.row(p, today)),
+      });
+    }
+
+    const members = domainMembers(this.hierarchy, assignments);
+    const unordered = domainTaskPaths(this.snapshot, this.hierarchy, members, priorities, today);
+    const domainRows = applyOrder(stableShuffle(unordered), this.store.taskOrder("domains"));
+
+    return {
+      today: todayIso(today),
+      focus,
+      domains: domainRows.map((p) => builder.row(p, today)),
+      deadlines: deadlinePaths(this.snapshot, today).map((p) => builder.row(p, today)),
+    };
+  }
+
+  /** Save one dashboard list's manual order. A focus list must belong to a
+   *  slotted project; the deadline feed has no manual layer. */
+  saveTaskOrder(list: "domains" | `focus:${string}`, paths: string[]): void {
+    if (list === "domains") {
+      this.store.saveTaskOrder("domains", paths);
+      return;
+    }
+    const projectPath = list.slice("focus:".length);
+    if (!this.store.priorities().projects.includes(projectPath)) throw new Error("that project is not in a slot");
+    this.store.saveTaskOrder(list, paths);
   }
 
   /* --- writes to the vault ------------------------------------------------ */

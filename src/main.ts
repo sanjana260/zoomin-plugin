@@ -24,6 +24,7 @@ import { DatatypesModal } from "./views/datatypes-modal";
 import { DomainModal } from "./views/domain-modal";
 import { GraphView, VIEW_GRAPH } from "./views/graph-view";
 import { PanelView, VIEW_PANEL } from "./views/panel-view";
+import { TasksView, VIEW_TASKS } from "./views/tasks-view";
 
 // How long to wait after the last vault event before rebuilding. Obsidian
 // fires `changed` per save; a save is a few events close together.
@@ -70,11 +71,13 @@ export default class ZoomInPlugin extends Plugin {
 
     this.registerView(VIEW_GRAPH, (leaf: WorkspaceLeaf) => new GraphView(leaf, this));
     this.registerView(VIEW_PANEL, (leaf: WorkspaceLeaf) => new PanelView(leaf, this));
+    this.registerView(VIEW_TASKS, (leaf: WorkspaceLeaf) => new TasksView(leaf, this));
     this.addSettingTab(new ZoomInSettingTab(this.app, this));
 
     this.addRibbonIcon("scan-search", "Open ZoomIn map", () => void this.openGraph());
     this.addCommand({ id: "open-graph", name: "Open map", callback: () => void this.openGraph() });
     this.addCommand({ id: "open-panel", name: "Open panel", callback: () => void this.openPanel() });
+    this.addCommand({ id: "open-tasks", name: "Open tasks", callback: () => void this.openTasks() });
     this.addCommand({ id: "open-datatypes", name: "Edit datatypes", callback: () => this.openDatatypes() });
     this.addCommand({
       id: "cycle-status-active",
@@ -160,6 +163,17 @@ export default class ZoomInPlugin extends Plugin {
     const leaf = this.app.workspace.getRightLeaf(false);
     if (!leaf) return;
     await leaf.setViewState({ type: VIEW_PANEL, active: true });
+    await this.app.workspace.revealLeaf(leaf);
+  }
+
+  async openTasks(): Promise<void> {
+    const existing = this.app.workspace.getLeavesOfType(VIEW_TASKS);
+    if (existing.length > 0) {
+      await this.app.workspace.revealLeaf(existing[0]);
+      return;
+    }
+    const leaf = this.app.workspace.getLeaf(true);
+    await leaf.setViewState({ type: VIEW_TASKS, active: true });
     await this.app.workspace.revealLeaf(leaf);
   }
 

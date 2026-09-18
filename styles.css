@@ -416,3 +416,251 @@
 .zoomin-shape-icon.set > * { fill: var(--accent); stroke: none; }
 .zoomin-view .zoomin-shape-select { flex: none; width: 104px; }
 .zoomin-category-list { max-height: 58vh; overflow-y: auto; margin-top: 4px; }
+
+/* --- the task dashboard ------------------------------------------------------ */
+
+/* The view itself never scrolls; each region does. A long domain list must
+   not carry the deadline feed off the bottom of the screen with it. */
+.zoomin-tasks.view-content { padding: 14px 18px 0; display: flex; flex-direction: column; container-type: inline-size; }
+.zoomin-task-cols { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr) 248px; gap: 0 18px; }
+
+/* The board on top, the domain list beneath, scrolling separately. The board
+   is capped at half the height so a slot with forty tasks cannot push the
+   domains out of reach — past that it scrolls inside its own region. */
+.zoomin-task-main { min-height: 0; display: flex; flex-direction: column; }
+.zoomin-task-focus { flex: none; max-height: 50%; }
+.zoomin-task-domains { flex: 1; }
+
+.zoomin-task-col { min-height: 0; overflow-y: auto; padding-bottom: 28px; }
+/* Headings stay put while their region scrolls, on the page ground so rows
+   slide under them cleanly. */
+.zoomin-task-col > h3, .zoomin-task-head { position: sticky; top: 0; z-index: 1; background: var(--bg); }
+.zoomin-task-col > h3, .zoomin-task-head > h3 { margin: 0 0 8px; padding: 2px 0 6px; }
+.zoomin-task-head { margin-bottom: 8px; }
+.zoomin-task-head > h3 { margin-bottom: 4px; }
+
+.zoomin-task-aside { border-left: 1px solid var(--line); padding-left: 18px; }
+
+/* Stacked, the regions share one scroll again: three independently scrolling
+   boxes in a single narrow column is worse than a long page. The leaf, not
+   the window, decides — a split pane is the common narrow case now. */
+@container (max-width: 700px) {
+  .zoomin-tasks.view-content { overflow-y: auto; }
+  .zoomin-task-cols { flex: none; display: block; }
+  .zoomin-task-main { display: block; }
+  .zoomin-task-focus { max-height: none; }
+  .zoomin-task-col { overflow: visible; padding-bottom: 24px; }
+  .zoomin-task-aside { border-left: none; padding-left: 0; border-top: 1px solid var(--line); padding-top: 12px; }
+}
+
+/* The domain chips: a row of small pills above the list, one per priority
+   domain. Pressed is on and carries the domain's hue; released is drained to
+   grey, the way a suppressed region recedes on the map. */
+.zoomin-chips { display: flex; flex-wrap: wrap; gap: 6px; padding-bottom: 8px; }
+.zoomin-view .zoomin-chip {
+  --chip: var(--ink-faint);
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: auto;
+  padding: 2px 8px 2px 9px;
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1.5;
+  color: var(--chip);
+  background: var(--surface);
+  border: 1px solid var(--chip);
+  border-radius: 999px;
+  white-space: nowrap;
+  box-shadow: none;
+}
+.zoomin-chip-count { font-variant-numeric: tabular-nums; font-weight: 600; opacity: 0.75; }
+.zoomin-view .zoomin-chip[aria-pressed="false"] { color: var(--ink-faint); border-color: var(--line); background: none; }
+.zoomin-view .zoomin-chip[aria-pressed="false"] .zoomin-chip-count { opacity: 0.6; }
+.zoomin-view .zoomin-chip:hover { filter: brightness(0.92); background: var(--surface); }
+.zoomin-view .zoomin-chip:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* The one project you committed to, as a lit panel. The domain's hue washes
+   down from the top edge into the surface — the region of the map you are
+   inside is the region the list is inside — and the wash is a gradient rather
+   than a border so the box reads as a place, not a frame around a list. */
+.zoomin-focus-box {
+  --hue: var(--ink-faint); /* overridden inline per project */
+  padding: 14px 18px 10px;
+  margin-bottom: 14px;
+  border-radius: 14px;
+  background:
+    linear-gradient(180deg,
+      color-mix(in oklab, var(--hue) 20%, var(--surface)) 0%,
+      color-mix(in oklab, var(--hue) 6%, var(--surface)) 55%,
+      var(--surface) 100%);
+  border: 1px solid color-mix(in oklab, var(--hue) 30%, var(--line));
+  box-shadow: 0 1px 0 color-mix(in oklab, var(--hue) 12%, transparent) inset;
+}
+.zoomin-focus-head { margin-bottom: 8px; }
+/* The instrument-panel voice: a tracked mono eyebrow says where this sits and
+   how much is on the board, then the name gets the display face at size. */
+.zoomin-focus-eyebrow {
+  display: flex;
+  gap: 10px;
+  align-items: baseline;
+  font-family: var(--font-monospace);
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: color-mix(in oklab, var(--hue) 55%, var(--ink-soft));
+}
+.zoomin-focus-eyebrow > span + span::before { content: "·"; margin-right: 10px; opacity: 0.6; }
+.zoomin-focus-open { font-variant-numeric: tabular-nums; }
+.zoomin-focus-title {
+  margin: 2px 0 0;
+  font-family: "Avenir Next Condensed", "SF Compact Display", -apple-system, system-ui, sans-serif;
+  font-size: 30px;
+  font-weight: 600;
+  line-height: 1.05;
+  letter-spacing: 0.005em;
+  color: var(--ink);
+  text-wrap: balance;
+}
+
+.zoomin-task-list { list-style: none; margin: 0; padding: 0; }
+
+.zoomin-task-row {
+  --hue: var(--accent);  /* rows set their own inline */
+  --tick: var(--hue);    /* the ring's colour; tiers override */
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 6px 6px 6px 4px;
+  border-radius: var(--radius);
+  background: var(--surface);
+  border: 1px solid transparent;
+}
+.zoomin-task-list > .zoomin-task-row + .zoomin-task-row { margin-top: 3px; }
+
+/* Inside the panel the board is wide, so tasks flow into columns rather than
+   leaving two-thirds of the panel empty. Drag order still reads left to
+   right, top to bottom; the drop indicator becomes a vertical bar in the cell
+   the row will land in. */
+.zoomin-focus-box .zoomin-task-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 2px 18px;
+}
+.zoomin-focus-box .zoomin-task-list > .zoomin-task-row + .zoomin-task-row { margin-top: 0; }
+.zoomin-focus-box .zoomin-task-row { background: none; padding-left: 0; }
+.zoomin-focus-box .zoomin-drop-line { width: 2px; height: auto; align-self: stretch; margin: 2px 0; }
+.zoomin-task-row:hover { border-color: var(--line); }
+.zoomin-task-row[draggable="true"] { cursor: grab; }
+.zoomin-task-row.dragging { opacity: 0.4; cursor: grabbing; }
+
+/* The checkbox, drawn: a ring in the row's own colour that fills when ticked.
+   Hover swells it a touch and tints it; the tick pops in rather than appearing. */
+.zoomin-view .zoomin-task-check {
+  appearance: none;
+  -webkit-appearance: none;
+  flex: none;
+  width: 18px;
+  height: 18px;
+  min-height: 0;
+  margin: 0;
+  border: 1.5px solid var(--tick);
+  border-radius: 50%;
+  background: transparent;
+  cursor: pointer;
+  position: relative;
+  transition: transform 140ms ease, background-color 140ms ease, box-shadow 140ms ease;
+}
+.zoomin-task-check::after {
+  content: "";
+  position: absolute;
+  left: 5px;
+  top: 2px;
+  width: 4px;
+  height: 8px;
+  border: solid var(--surface);
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg) scale(0);
+  transform-origin: center;
+  transition: transform 140ms cubic-bezier(0.2, 0.9, 0.3, 1.4);
+}
+.zoomin-view .zoomin-task-check:hover { transform: scale(1.1); background: color-mix(in oklab, var(--tick) 22%, transparent); }
+.zoomin-view .zoomin-task-check:focus-visible { outline: none; box-shadow: 0 0 0 3px color-mix(in oklab, var(--tick) 35%, transparent); }
+.zoomin-view .zoomin-task-check:checked { background: var(--tick); }
+.zoomin-view .zoomin-task-check:checked::after { transform: rotate(45deg) scale(1); }
+.zoomin-view .zoomin-task-check:disabled { cursor: progress; opacity: 0.7; }
+@media (prefers-reduced-motion: reduce) {
+  .zoomin-task-check, .zoomin-task-check::after { transition: none; }
+  .zoomin-view .zoomin-task-check:hover { transform: none; }
+}
+
+.zoomin-view .zoomin-task-label {
+  flex: 1;
+  min-width: 0;
+  height: auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: left;
+  justify-content: flex-start;
+  font: inherit;
+  font-size: 13.5px;
+  color: inherit;
+  background: none;
+  border: none;
+  padding: 0;
+  box-shadow: none;
+}
+.zoomin-view .zoomin-task-label:hover { text-decoration: underline; background: none; }
+.zoomin-view .zoomin-task-label:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 3px; }
+
+/* Done stays until the next render, struck through, so a mis-click can be
+   undone — the vault already has the write, the row just isn't gone yet. */
+.zoomin-task-row.done .zoomin-task-label { text-decoration: line-through; color: var(--ink-faint); }
+.zoomin-task-row.done .zoomin-shape-dot { opacity: 0.45; }
+
+.zoomin-task-meta {
+  flex: none;
+  font-size: 11px;
+  color: var(--ink-faint);
+  max-width: 40%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.zoomin-task-due { font-variant-numeric: tabular-nums; font-weight: 600; }
+
+/* The aside: the checkbox sits on the right, a little larger, as the row's
+   one action; the tier owns the ring, so it matches the box it sits in.
+   Title and meta stack on the left — at 248px they cannot share a line. */
+.zoomin-task-aside .zoomin-task-row { flex-wrap: wrap; row-gap: 1px; padding: 7px 8px; }
+.zoomin-task-aside .zoomin-task-check { order: 3; width: 20px; height: 20px; margin-left: auto; }
+.zoomin-task-aside .zoomin-task-check::after { left: 6px; top: 3px; }
+.zoomin-task-aside .zoomin-shape-dot { order: 1; }
+.zoomin-task-aside .zoomin-task-label { order: 2; flex: 1; }
+.zoomin-task-aside .zoomin-task-meta { order: 4; flex-basis: 100%; max-width: none; margin-left: 22px; }
+
+/* Within a week the whole row takes the tier, not just the number: the feed
+   is a sidebar, and a coloured box is what makes it worth a sideways glance. */
+.zoomin-task-row.tier-red { --tick: var(--danger); background: var(--danger-soft); border-color: var(--danger-soft); }
+.zoomin-task-row.tier-red .zoomin-task-due { color: var(--danger); }
+.zoomin-task-row.tier-yellow { --tick: var(--warn); background: var(--warn-soft); border-color: var(--warn-soft); }
+.zoomin-task-row.tier-yellow .zoomin-task-due { color: var(--warn); }
+.zoomin-task-row.tier-red:hover { border-color: var(--danger); }
+.zoomin-task-row.tier-yellow:hover { border-color: var(--warn); }
+.zoomin-task-row.tier-grey { --tick: var(--ink-faint); opacity: 0.62; }
+.zoomin-task-row.tier-grey .zoomin-task-due { color: var(--ink-faint); font-weight: 500; }
+
+.zoomin-task-handle {
+  flex: none;
+  width: 10px;
+  color: var(--line-strong);
+  font-size: 13px;
+  line-height: 1;
+  letter-spacing: -2px;
+  user-select: none;
+}
+.zoomin-task-row:hover .zoomin-task-handle { color: var(--ink-faint); }
+
+/* One indicator, moved to wherever the drop would land. */
+.zoomin-drop-line { height: 2px; margin: 1px 6px; background: var(--accent); border-radius: 1px; }

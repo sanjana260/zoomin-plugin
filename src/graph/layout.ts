@@ -17,7 +17,7 @@
 export const SPREAD = 900.0;
 
 /** 64-bit FNV-1a split into two 32-bit lanes, one for angle, one for radius. */
-function fnv1a(text: string): [number, number] {
+export function fnv1a(text: string): [number, number] {
   let a = 0x811c9dc5;
   let b = 0x01000193 ^ 0x9e3779b9;
   for (let i = 0; i < text.length; i++) {
