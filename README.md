@@ -68,6 +68,14 @@ assignments, slots and their history, datatypes, project rulings, task order —
 lives in the plugin's `data.json` and travels with the vault (node positions
 and panel folds stay per-device).
 
+## Development
+
+Agent- or contributor-facing orientation lives in [handoff.md](handoff.md):
+the layout, the build/test/verify loop, the safety rules, and the
+conventions. The short version: `npm install && npm run build && npm test`,
+develop only against the generated test vault, and record every non-obvious
+decision in `design.md`'s log.
+
 ## Provenance
 
 ZoomIn began as a standalone macOS app (pywebview + FastAPI) and was ported to
