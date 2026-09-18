@@ -1,0 +1,5 @@
+/* ZoomIn — every rule is scoped under .zoomin-* so nothing leaks into the editor. */
+
+.zoomin-view .zoomin-placeholder {
+  color: var(--text-muted);
+}
