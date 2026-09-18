@@ -83,11 +83,17 @@ export class GraphView extends ItemView {
 
     const graphEl = root.createDiv({ cls: "zoomin-graph" });
 
-    // Tools: the funnel on the left, the magnifier (phase 5) and fit-all on the right.
+    // Tools: the funnel on the left; the magnifier and fit-all on the right.
     const left = root.createDiv({ cls: "zoomin-graph-tools zoomin-left" });
     const filterButton = left.createEl("button", { cls: "zoomin-graph-btn", attr: { type: "button", "aria-label": "Filter", title: "Filter", "aria-expanded": "false" } });
     setIcon(filterButton, "filter");
     const right = root.createDiv({ cls: "zoomin-graph-tools zoomin-right" });
+    const search = right.createEl("button", { cls: "zoomin-graph-btn", attr: { type: "button", "aria-label": "Search notes", title: "Search notes", "aria-haspopup": "dialog" } });
+    setIcon(search, "search");
+    search.addEventListener("click", (event) => {
+      event.stopPropagation();
+      this.plugin.openSearch({ onPick: (item) => this.plugin.enterFocus(item.id, { explicit: true }) });
+    });
     const fit = right.createEl("button", { cls: "zoomin-graph-btn", attr: { type: "button", "aria-label": "Fit graph in view", title: "Fit graph in view" } });
     setIcon(fit, "maximize");
     fit.addEventListener("click", () => this.renderer?.fitAll());
@@ -163,6 +169,11 @@ export class GraphView extends ItemView {
 
     this.unsubscribe = this.plugin.model.onChange((structural) => this.refresh(structural));
     this.refresh(true);
+    // The lens may already be on before this leaf existed (the active-file
+    // follower never opens leaves); catching up costs one repaint.
+    if (this.plugin.focusId !== null) {
+      this.renderer.setFocus(this.plugin.focusId);
+    }
   }
 
   /** Structural changes reload the simulation; everything else only recolours. */

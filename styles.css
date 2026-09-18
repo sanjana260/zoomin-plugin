@@ -664,3 +664,155 @@
 
 /* One indicator, moved to wherever the drop would land. */
 .zoomin-drop-line { height: 2px; margin: 1px 6px; background: var(--accent); border-radius: 1px; }
+
+/* --- the palette --------------------------------------------------------------- */
+
+/* A quick switcher, anchored high: the list grows downward as you type. */
+.zoomin-palette { width: min(560px, calc(100vw - 32px)) !important; }
+.zoomin-palette-eyebrow,
+.zoomin-palette-empty {
+  font-family: var(--font-monospace);
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+.zoomin-palette-eyebrow { padding: 12px 16px 0; }
+.zoomin-palette-empty { margin: 0; padding: 18px 16px; }
+.zoomin-view .zoomin-palette input[type="text"] {
+  width: 100%;
+  padding: 14px 16px;
+  font: inherit;
+  font-size: 16px;
+  color: var(--ink);
+  background: none;
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  border-radius: 0;
+}
+.zoomin-view .zoomin-palette input[type="text"]:focus-visible { outline: none; border-color: var(--line); box-shadow: none; }
+.zoomin-view .zoomin-palette input::placeholder { color: var(--ink-faint); }
+.zoomin-palette-list { list-style: none; margin: 0; padding: 6px 0; max-height: 52vh; overflow-y: auto; }
+.zoomin-palette-row { display: flex; gap: 10px; align-items: center; height: 38px; padding: 0 14px; cursor: default; }
+/* The active bar is an inset shadow, not a border, so the row's content does
+   not shift by 2px as the highlight moves. */
+.zoomin-palette-row.active { background: var(--bg); box-shadow: inset 2px 0 0 var(--accent); }
+.zoomin-palette-text { flex: 1; min-width: 0; line-height: 1.3; }
+.zoomin-palette-label, .zoomin-palette-sub { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.zoomin-palette-label { font-size: 13.5px; color: var(--ink); }
+.zoomin-palette-sub { font-size: 11.5px; color: var(--ink-faint); }
+/* A matched run changes colour, not background: a yellow smear across a list
+   of forty names is the one thing this palette must not look like. */
+.zoomin-view .zoomin-palette mark { color: var(--accent); background: none; font-weight: 600; }
+
+/* --- the dossier ----------------------------------------------------------------- */
+
+/* While focusing, the three sections step aside and the panel carries one
+   note. Its hue washes the top the way the halo wears it on the map. */
+.zoomin-panel.zoomin-focusing { overflow-y: auto; }
+.zoomin-focusing .zoomin-sections { display: none; }
+.zoomin-view .zoomin-dossier {
+  --hue: var(--ink-faint); /* set inline per note */
+  background:
+    linear-gradient(180deg,
+      color-mix(in oklab, var(--hue) 14%, var(--surface)) 0,
+      color-mix(in oklab, var(--hue) 4%, var(--surface)) 220px,
+      var(--surface) 360px);
+  margin: -14px -16px 0;
+  padding: 14px 16px 40px;
+}
+.zoomin-dossier-bar { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 18px; }
+.zoomin-view .zoomin-back { font-size: 12px; color: var(--ink-soft); }
+.zoomin-view .zoomin-back:hover { color: var(--ink); }
+
+/* The instrument-panel voice again: what it is and where it sits, tracked
+   mono in the note's hue, then the name at display size. */
+.zoomin-dossier-eyebrow {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+  margin: 0;
+  font-family: var(--font-monospace);
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: color-mix(in oklab, var(--hue) 60%, var(--ink-soft));
+}
+.zoomin-dossier-eyebrow .zoomin-sep { opacity: 0.55; }
+.zoomin-dossier-title {
+  margin: 4px 0 10px;
+  font-family: "Avenir Next Condensed", "SF Compact Display", -apple-system, system-ui, sans-serif;
+  font-size: 30px;
+  font-weight: 600;
+  line-height: 1.05;
+  letter-spacing: 0.005em;
+  color: var(--ink);
+  text-wrap: balance;
+  overflow-wrap: anywhere;
+}
+.zoomin-dossier-desc { margin: 0 0 18px; font-size: 13px; line-height: 1.55; color: var(--ink-soft); }
+
+/* Fields: a two-column ledger. The label column is fixed so values line up
+   down the list. */
+.zoomin-dossier-fields {
+  display: grid;
+  grid-template-columns: 74px minmax(0, 1fr);
+  align-items: center;
+  gap: 8px 10px;
+  margin: 0 0 24px;
+}
+.zoomin-dossier-fields dt {
+  font-family: var(--font-monospace);
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+.zoomin-dossier-fields dd { margin: 0; min-width: 0; font-size: 13px; }
+.zoomin-field-value { display: flex; align-items: center; gap: 4px; min-width: 0; }
+.zoomin-field-value > :first-child { flex: 1; min-width: 0; }
+.zoomin-field-static { display: flex; align-items: center; gap: 8px; min-height: 28px; }
+
+/* The parent is a button that looks like a value: the note's name, and on
+   hover the affordance that it can be changed. */
+.zoomin-view .zoomin-field-button {
+  display: block;
+  width: 100%;
+  min-height: 28px;
+  height: auto;
+  padding: 4px 8px;
+  text-align: left;
+  justify-content: flex-start;
+  font: inherit;
+  font-size: 13px;
+  color: var(--ink);
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  box-shadow: none;
+}
+.zoomin-view .zoomin-field-button:hover:not(:disabled) { border-color: var(--ink-faint); background: var(--bg); }
+.zoomin-view .zoomin-field-date {
+  width: 100%;
+  min-height: 28px;
+  height: auto;
+  padding: 3px 8px;
+  font: inherit;
+  font-size: 13px;
+  color: var(--ink);
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  box-shadow: none;
+}
+.zoomin-dossier-fields .zoomin-assign-select { width: 100%; }
+.zoomin-dossier-fields .zoomin-card-status { justify-self: start; }
+.zoomin-field-project { display: flex; align-items: center; min-height: 28px; }
+.zoomin-field-project .zoomin-field-button { color: var(--accent); }
+
+.zoomin-dossier-links > h3 { margin-bottom: 4px; }
+.zoomin-dossier-links .zoomin-group-label { margin: 10px 0 0; }
+.zoomin-dossier-links .zoomin-list { margin-top: 2px; }

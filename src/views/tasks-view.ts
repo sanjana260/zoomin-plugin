@@ -96,6 +96,10 @@ export class TasksView extends ItemView {
     const deadlineEmpty = aside.createEl("p", { cls: "zoomin-hint", text: "No task has a deadline." });
 
     this.els = { focusBoxes, focusEmpty, chips, domainTasks, domainEmpty, deadlineTasks, deadlineEmpty };
+    // The domain list persists across renders (only its rows are replaced),
+    // so its drag handlers are attached once, here. The focus lists are
+    // rebuilt per render and wire their own.
+    this.makeSortable(domainTasks, "domains");
     this.unsubscribe = this.plugin.model.onChange(() => {
       if (!this.holdRender) this.render();
     });
@@ -214,6 +218,9 @@ export class TasksView extends ItemView {
       list.querySelectorAll(".zoomin-task-row").forEach((el) => paths.push((el as HTMLElement).dataset.path ?? ""));
       try {
         this.plugin.model.saveTaskOrder(listKey as "domains", paths);
+        // What is shown is what was saved: the model applies the saved order,
+        // so a render is the truth rather than a bet on the DOM we just moved.
+        this.render();
       } catch (error) {
         toast(errorMessage(error));
         this.render();

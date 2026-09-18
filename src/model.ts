@@ -15,7 +15,7 @@
  */
 
 import { DOMAIN_HUES, Member, buildPayload, domainMembers, effectiveDomain, shapeIndex, shapeOf } from "./graph/build";
-import { Hierarchy, TreeNode, buildHierarchy } from "./graph/hierarchy";
+import { EXCLUDED_TITLES, Hierarchy, TreeNode, buildHierarchy } from "./graph/hierarchy";
 import { RowBuilder, applyOrder, deadlinePaths, domainTaskPaths, exploringTasksUnder, stableShuffle, todayIso } from "./graph/tasks";
 import type { TaskRow } from "./graph/tasks";
 export type { TaskRow };
@@ -72,6 +72,20 @@ export interface TasksModelView {
   deadlines: TaskRow[];
 }
 
+export interface NoteView {
+  path: string;
+  label: string;
+  status: Status | null;
+  categories: string[];
+  datatype: { name: string; shape: string | null } | null;
+  description: string | null;
+  parent: { path: string; label: string } | null;
+  domain: { id: string; name: string; hue: number } | null;
+  deadline: string | null;
+  children: number;
+  project: { is: boolean; reason: string | null; override: boolean | null; automatic: boolean };
+}
+
 export interface PrioritiesView {
   domains: string[];
   projects: string[];
@@ -116,7 +130,7 @@ export class ZoomInModel {
   }
 
   /** Every note whose category is flagged as a project datatype. */
-  private flaggedPaths(): Set<string> {
+  flaggedPaths(): Set<string> {
     const projectCategories = new Set(this.store.datatypes().filter((d) => d.isProject).map((d) => fold(d.name)));
     const paths = new Set<string>();
     if (!projectCategories.size) return paths;
@@ -504,6 +518,99 @@ export class ZoomInModel {
     const projectPath = list.slice("focus:".length);
     if (!this.store.priorities().projects.includes(projectPath)) throw new Error("that project is not in a slot");
     this.store.saveTaskOrder(list, paths);
+  }
+
+  /* --- one note, as the dossier shows it ---------------------------------- */
+
+  /**
+   * One note, in words: where it sits and what it is. Everything here is
+   * derivable from the payload plus the store, but the dossier wants it for
+   * one note at a time and as labels rather than indices.
+   */
+  note(path: string): NoteView | null {
+    const note = this.snapshot.notes.get(path);
+    if (!note) return null;
+    const datatypes = this.store.datatypes();
+    const index = shapeOf(note.categories, shapeIndex(datatypes));
+    const datatype = index >= 0 ? { name: datatypes[index].name, shape: datatypes[index].shape } : null;
+    const parentPath = this.hierarchy.parentOf.get(path);
+    const parent = parentPath !== undefined && this.snapshot.notes.has(parentPath)
+      ? { path: parentPath, label: this.snapshot.notes.get(parentPath)!.title }
+      : null;
+    // The same walk and hue table the map uses, so the panel can never name
+    // a domain the node is not painted in.
+    const domains = this.store.domains();
+    const domainId = effectiveDomain(this.hierarchy, this.store.assignments(), path).domainId;
+    const di = domainId !== null ? domains.findIndex((d) => d.id === domainId) : -1;
+    const domain = di >= 0 ? { id: domainId!, name: domains[di].name, hue: DOMAIN_HUES[di % DOMAIN_HUES.length] } : null;
+    let children = 0;
+    for (const p of this.hierarchy.parentOf.values()) if (p === path) children++;
+    return {
+      path,
+      label: note.title,
+      status: note.status,
+      categories: [...note.categories],
+      datatype,
+      description: note.description,
+      parent,
+      domain,
+      deadline: note.deadline,
+      children,
+      project: this.projectVerdict(path),
+    };
+  }
+
+  /**
+   * Whether a note is a project, and which source settled it. The sources
+   * rank — ruling, then datatype flag, then the tree — and `reason` names the
+   * winner. `override` is the ruling itself, null when the note is left to
+   * the automatic sources, and `automatic` is what those sources would say on
+   * their own — so flipping the answer can clear a ruling that has become
+   * redundant instead of stacking one on top of a rule that already agrees.
+   */
+  projectVerdict(path: string): { is: boolean; reason: string | null; override: boolean | null; automatic: boolean } {
+    const note = this.snapshot.notes.get(path)!;
+    const override = this.store.projectOverrides().get(path) ?? null;
+    const offered = this.isProject(path);
+    const named = [...this.hierarchy.parentOf.values()].includes(path);
+    const automatic = (this.flaggedPaths().has(path) || named) && !EXCLUDED_TITLES.has(note.title);
+    let reason: string | null;
+    if (override !== null) reason = override ? "declared" : "removed";
+    else if (!offered) reason = null;
+    else reason = this.hierarchy.nodes.get(path)!.declared ? "datatype" : "children";
+    return { is: offered, reason, override, automatic };
+  }
+
+  /**
+   * A node's immediate neighbourhood, split by direction, from the edges —
+   * so the dossier works with the map leaf closed.
+   */
+  neighbours(id: string): { out: { path: string; kind: number }[]; in: { path: string; kind: number }[] } {
+    const out: { path: string; kind: number }[] = [], inn: { path: string; kind: number }[] = [];
+    const nodes = (p: string) => this.snapshot.notes.has(p) || this.snapshot.phantoms.has(p);
+    for (const edge of this.snapshot.edges) {
+      if (edge.source === id && nodes(edge.target)) out.push({ path: edge.target, kind: edge.kind });
+      else if (edge.target === id && nodes(edge.source)) inn.push({ path: edge.source, kind: edge.kind });
+    }
+    return { out, in: inn };
+  }
+
+  /** The payload's line for one node, for hue/label/status lookups. */
+  nodeInfo(id: string): { label: string; kind: number; status: number; datatype: number; domain: number; hue: number | null; domainLabel: string | null } | null {
+    const p = this.payload();
+    const i = p.nodes.id.indexOf(id);
+    if (i < 0) return null;
+    const di = p.nodes.domain[i];
+    const domain = di >= 0 ? p.domains[di] : null;
+    return {
+      label: p.nodes.label[i],
+      kind: p.nodes.kind[i],
+      status: p.nodes.status[i],
+      datatype: p.nodes.datatype[i],
+      domain: di,
+      hue: domain ? domain.hue : null,
+      domainLabel: domain ? domain.label : null,
+    };
   }
 
   /* --- writes to the vault ------------------------------------------------ */

@@ -13,17 +13,19 @@
  * in the views.
  */
 
-import { Notice, Plugin, TAbstractFile, TFile, WorkspaceLeaf, debounce } from "obsidian";
+import { MarkdownView, Notice, Plugin, TAbstractFile, TFile, WorkspaceLeaf, debounce } from "obsidian";
 import { ZoomInModel } from "./model";
 import { DEFAULT_SETTINGS, ZoomInSettingTab, ZoomInSettings } from "./settings";
 import { LocalState } from "./state/local";
 import { Store, StoreData, upgrade } from "./state/store";
 import { appSource } from "./vault/snapshot";
 import { STATUS_LABELS, appWriter } from "./vault/write";
+import { shapeDot } from "./views/ui";
 import { DatatypesModal } from "./views/datatypes-modal";
 import { DomainModal } from "./views/domain-modal";
 import { GraphView, VIEW_GRAPH } from "./views/graph-view";
 import { PanelView, VIEW_PANEL } from "./views/panel-view";
+import { SearchItem, ZoomInSearch } from "./views/search-modal";
 import { TasksView, VIEW_TASKS } from "./views/tasks-view";
 
 // How long to wait after the last vault event before rebuilding. Obsidian
@@ -80,6 +82,21 @@ export default class ZoomInPlugin extends Plugin {
     this.addCommand({ id: "open-tasks", name: "Open tasks", callback: () => void this.openTasks() });
     this.addCommand({ id: "open-datatypes", name: "Edit datatypes", callback: () => this.openDatatypes() });
     this.addCommand({
+      id: "focus-on-note",
+      name: "Focus on note…",
+      callback: () => this.openSearch({ onPick: (item) => this.enterFocus(item.id, { explicit: true }) }),
+    });
+    this.addCommand({
+      id: "focus-active-note",
+      name: "Focus the active note",
+      checkCallback: (checking) => {
+        const file = this.app.workspace.getActiveFile();
+        if (!file || !this.model.snapshot.notes.has(file.path)) return false;
+        if (!checking) this.enterFocus(file.path, { explicit: true });
+        return true;
+      },
+    });
+    this.addCommand({
       id: "cycle-status-active",
       name: "Cycle status of the active note",
       checkCallback: (checking) => {
@@ -101,6 +118,25 @@ export default class ZoomInPlugin extends Plugin {
       this.registerEvent(this.app.metadataCache.on("changed", () => this.scheduleReload()));
       this.registerEvent(this.app.metadataCache.on("deleted", () => this.scheduleReload()));
       this.registerEvent(this.app.vault.on("rename", (file: TAbstractFile, oldPath: string) => this.onRename(file, oldPath)));
+      // The dossier follows the note open in the editor, when it wants to.
+      // Not explicit: it never opens a leaf and only moves a lens that is
+      // already on the map.
+      this.registerEvent(
+        this.app.workspace.on("active-leaf-change", (leaf) => {
+          if (!this.settings.followActiveFile) return;
+          const file = leaf?.view instanceof MarkdownView ? leaf.view.file : null;
+          if (!file || file.path === this.focusId) return;
+          if (!this.model.snapshot.notes.has(file.path)) return;
+          if (this.focusId === null && !this.app.workspace.getLeavesOfType(VIEW_PANEL).length) return;
+          this.enterFocus(file.path);
+        }),
+      );
+      // Escape leaves the lens — unless a dialog owns it.
+      this.registerDomEvent(document, "keydown", (event: KeyboardEvent) => {
+        if (event.key === "Escape" && this.focusId !== null && !document.querySelector(".modal-container")) {
+          this.exitFocus();
+        }
+      });
     });
   }
 
@@ -209,9 +245,129 @@ export default class ZoomInPlugin extends Plugin {
   /* --- hooks filled in by later phases ------------------------------------ */
 
   /** A node click. Focus mode arrives in phase 5. */
-  focusNode(_id: string): void {}
+  /* --- focus mode --------------------------------------------------------- */
 
-  exitFocus(): void {}
+  /** The note under the lens, or null. The dossier reads the model through
+   *  it; the lens reads the renderer. */
+  focusId: string | null = null;
+
+  focusNode(id: string): void {
+    this.enterFocus(id);
+  }
+
+  /**
+   * Put one note under the lens: the map lights its neighbourhood and the
+   * panel becomes its dossier. `explicit` is a click, a palette pick or a
+   * command — those open whichever leaf they need. The active-file follower
+   * is not explicit: it never opens a leaf, and it only moves the lens the
+   * map already shows.
+   */
+  enterFocus(id: string, options: { explicit?: boolean } = {}): void {
+    if (!this.model.nodeInfo(id)) return;
+    this.focusId = id;
+    const graph = options.explicit ? null : this.graphRenderer();
+    if (options.explicit) {
+      void this.openGraph().then((view) => {
+        view?.renderer?.setFocus(id);
+        view?.renderer?.focusOn(id);
+      });
+      void this.openPanel();
+    } else if (graph) {
+      graph.setFocus(id);
+      graph.focusOn(id);
+    }
+    this.refreshFocusViews();
+  }
+
+  /** Leaving the lens keeps the camera: you leave it where you were looking. */
+  exitFocus(): void {
+    if (this.focusId === null) return;
+    this.focusId = null;
+    this.graphRenderer()?.setFocus(null);
+    this.refreshFocusViews();
+  }
+
+  private graphRenderer() {
+    const leaf = this.app.workspace.getLeavesOfType(VIEW_GRAPH)[0];
+    return (leaf?.view as GraphView | undefined)?.renderer ?? null;
+  }
+
+  private refreshFocusViews(): void {
+    this.panelView()?.refreshFocus();
+  }
+
+  private panelView(): PanelView | null {
+    const leaf = this.app.workspace.getLeavesOfType(VIEW_PANEL)[0];
+    return (leaf?.view as PanelView | undefined) ?? null;
+  }
+
+  /** Every note on the map, as palette rows. Parents first, biggest first —
+   *  with an empty query the list has to be worth reading, and the notes that
+   *  organise the vault are the ones you most often go looking for. */
+  searchItems(exclude?: Record<string, true>): SearchItem[] {
+    const n = this.model.payload().nodes;
+    const items: SearchItem[] = [];
+    for (let i = 0; i < n.id.length; i++) {
+      if (exclude && exclude[n.id[i]]) continue;
+      const phantom = n.kind[i] !== 0;
+      const datatype = n.datatype[i] >= 0 ? this.model.payload().datatypes[n.datatype[i]] : null;
+      items.push({
+        id: n.id[i],
+        label: n.label[i],
+        sub: phantom ? "linked to, not written yet" : n.id[i],
+        kind: phantom ? "unwritten" : datatype ? datatype.name : "",
+      });
+    }
+    const sizeOf = new Map<string, number>();
+    for (let i = 0; i < n.id.length; i++) sizeOf.set(n.id[i], n.isParent[i] ? -n.size[i] : 1);
+    items.sort(
+      (a, b) =>
+        (sizeOf.get(a.id)! - sizeOf.get(b.id)!) ||
+        a.label.localeCompare(b.label, undefined, { sensitivity: "base" }),
+    );
+    return items;
+  }
+
+  /** Open a note in the editor — the dossier's one way out of the plugin. */
+  openNote(path: string): void {
+    const file = this.app.vault.getFileByPath(path);
+    if (!file) return;
+    void this.app.workspace.getLeaf(false).openFile(file);
+  }
+
+  /** The dossier's parent picker: every written note but the subject. */
+  pickParent(ofPath: string): void {
+    const exclude: Record<string, true> = { [ofPath]: true };
+    this.openSearch({
+      title: "Parent of " + (this.model.nodeInfo(ofPath)?.label ?? ""),
+      placeholder: "Choose a parent…",
+      exclude,
+      filterPhantoms: true,
+      onPick: (item) => {
+        void this.model
+          .editNote(ofPath, "parent", item.id)
+          .then(() => this.panelView()?.render())
+          .catch(() => {});
+      },
+    });
+  }
+
+  openSearch(options: { title?: string; placeholder?: string; onPick: (item: SearchItem) => void; exclude?: Record<string, true>; filterPhantoms?: boolean }): void {
+    let items = this.searchItems(options.exclude);
+    if (options.filterPhantoms) items = items.filter((item) => item.kind !== "unwritten");
+    new ZoomInSearch(this.app, {
+      items,
+      title: options.title,
+      placeholder: options.placeholder ?? "Search notes…",
+      emptyText: "No note matches.",
+      icon: (item) => {
+        const info = this.model.nodeInfo(item.id);
+        const shape = info && info.datatype >= 0 ? this.model.payload().datatypes[info.datatype].shape : null;
+        return shapeDot(shape, info ? info.hue : null);
+      },
+      onPick: options.onPick,
+    }).open();
+  }
 
   /** Whether the vault can be written from here. */
   canWrite(): boolean {

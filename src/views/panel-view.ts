@@ -1,17 +1,20 @@
 /**
- * The panel: priorities, domains and projects, in the right sidebar — the
- * pywebview app's sidebar as a leaf of its own. In phase 5 it also becomes
- * the dossier of the note under the lens.
+ * The panel: priorities, domains and projects, in the right sidebar — and,
+ * while a note is under the lens, that note's dossier instead. The map
+ * answers "where am I"; the dossier answers "what is this, and what is it
+ * wired to".
  *
  * Rendering is imperative rebuild-from-scratch on every model change, as the
  * app did it: the lists are short and the code stays one function per list.
+ * The dossier reads the model synchronously — the cache already has the
+ * fields — so there is no second render to guard.
  */
 
-import { ItemView, WorkspaceLeaf } from "obsidian";
+import { ItemView, WorkspaceLeaf, setIcon } from "obsidian";
 import type ZoomInPlugin from "../main";
-import type { DomainView, ProjectView } from "../model";
+import type { DomainView, NoteView, ProjectView } from "../model";
 import { labelFor } from "../model";
-import { discloseButton, el, emptyNote, errorMessage, iconButton, row, shapeDot, toast } from "./ui";
+import { checkbox, discloseButton, el, emptyNote, errorMessage, iconButton, row, shapeDot, swatch, tag, toast } from "./ui";
 
 export const VIEW_PANEL = "zoomin-panel";
 
@@ -32,6 +35,9 @@ export class PanelView extends ItemView {
   private projectFilter: "all" | "none" = "all";
   private domainOpen: Record<string, true> = {};
   private priorityOpen: Record<string, true> = {};
+  sectionsEl: HTMLElement | null = null;
+  dossier: HTMLElement | null = null;
+  private dossierRenderer: DossierRenderer | null = null;
   private els: {
     stats: HTMLElement;
     slotSummary: HTMLElement;
@@ -51,7 +57,7 @@ export class PanelView extends ItemView {
     projectMore: HTMLButtonElement;
   } | null = null;
 
-  constructor(leaf: WorkspaceLeaf, private readonly plugin: ZoomInPlugin) {
+  constructor(leaf: WorkspaceLeaf, readonly plugin: ZoomInPlugin) {
     super(leaf);
     this.navigation = false;
   }
@@ -77,7 +83,14 @@ export class PanelView extends ItemView {
     root.empty();
     root.addClass("zoomin-view", "zoomin-panel");
     this.build(root);
+    this.dossierRenderer = new DossierRenderer(this);
     this.unsubscribe = this.plugin.model.onChange(() => this.render());
+    this.render();
+  }
+
+  /** Called by the plugin after a lens move; the model subscription would
+   *  not fire, because a lens is a view, not a model change. */
+  refreshFocus(): void {
     this.render();
   }
 
@@ -85,6 +98,9 @@ export class PanelView extends ItemView {
     this.unsubscribe?.();
     this.unsubscribe = null;
     this.els = null;
+    this.dossier = null;
+    this.sectionsEl = null;
+    this.dossierRenderer = null;
     this.contentEl.empty();
   }
 
@@ -165,6 +181,9 @@ export class PanelView extends ItemView {
       priorityDomains, domainName, domainsEmpty, domainList, unassignedBox, unassignedCount, filterNote,
       projectsEmpty, projectList, projectMore,
     };
+    this.sectionsEl = root.createDiv({ cls: "zoomin-sections" });
+    // Re-parent the three panels under a wrapper the dossier can step aside.
+    for (const section of [priorities, domains, projects]) this.sectionsEl.appendChild(section);
   }
 
   /* --- actions ------------------------------------------------------------ */
@@ -242,6 +261,13 @@ export class PanelView extends ItemView {
 
   render(): void {
     if (!this.els) return;
+    if (this.plugin.focusId !== null) {
+      this.dossierRenderer?.render(this.plugin.focusId);
+      return;
+    }
+    this.contentEl.removeClass("zoomin-focusing");
+    this.dossier?.hide();
+    this.sectionsEl?.show();
     const stats = this.plugin.model.payload().stats;
     this.els.stats.setText(`${stats.notes} notes · ${stats.links} links · ${stats.phantoms} unwritten`);
     this.renderPriorities();
@@ -457,5 +483,238 @@ export class PanelView extends ItemView {
     const remaining = visible.length - Math.min(this.projectLimit, visible.length);
     e.projectMore.toggle(remaining > 0);
     if (remaining > 0) e.projectMore.setText("Show " + remaining + " more");
+  }
+}
+
+/* --- the dossier, as a mode of this panel ----------------------------------- */
+//
+// One note under the lens: what it is, where it sits, what it is wired to.
+// Fields that can be changed are controls; the rest is read from the vault.
+// Everything comes from the model synchronously — the cache already has the
+// fields — so the dossier renders once, not twice.
+
+function dossierStatusLabel(status: number): string {
+  return ["Set status", "Unexplored", "Exploring", "Explored"][status || 0];
+}
+
+// A value with an optional "clear" beside it, for fields that can be empty.
+function clearable(control: HTMLElement, onClear: (() => void) | null, title: string): HTMLElement {
+  const wrap = el("div", "zoomin-field-value");
+  wrap.appendChild(control);
+  if (onClear) wrap.appendChild(iconButton("zoomin-icon", "×", title, onClear));
+  return wrap;
+}
+
+class DossierRenderer {
+  private dossierEl: {
+    root: HTMLElement;
+    eyebrow: HTMLElement;
+    title: HTMLElement;
+    desc: HTMLElement;
+    open: HTMLButtonElement;
+    fields: HTMLElement;
+    out: HTMLElement;
+    in: HTMLElement;
+    count: HTMLElement;
+  } | null = null;
+
+  constructor(private readonly panel: PanelView) {}
+
+  render(id: string): void {
+    const plugin = this.panel.plugin;
+    const model = plugin.model;
+    const info = model.nodeInfo(id);
+    if (!info) {
+      plugin.exitFocus();
+      return;
+    }
+    const note = model.snapshot.notes.has(id) ? model.note(id) : null;
+    const phantom = info.kind !== 0;
+    const colour = swatch(info.hue);
+
+    this.panel.contentEl.addClass("zoomin-focusing");
+    this.panel.sectionsEl?.hide();
+    if (!this.dossierEl) this.build(this.panel.contentEl);
+    const d = this.dossierEl!;
+    d.root.show();
+    // The hue washes the top of the panel, the same colour the halo wears on
+    // the map: one note, one colour, in both places.
+    d.root.style.setProperty("--hue", colour || "var(--ink-faint)");
+
+    // What it is: the category the note itself declares, whether or not a
+    // shape was ever given to it; "note" only when it says nothing.
+    const declared = note && note.categories.length ? note.categories[0] : info.datatype >= 0 ? model.payload().datatypes[info.datatype].name : null;
+    d.eyebrow.textContent = "";
+    const parts = [phantom ? "unwritten" : declared || "note"];
+    if (info.domainLabel) parts.push(info.domainLabel);
+    parts.forEach((text, i) => {
+      if (i) d.eyebrow.appendChild(el("span", "zoomin-sep", "·"));
+      d.eyebrow.appendChild(el("span", null, text));
+    });
+
+    d.title.setText(info.label);
+    d.desc.setText(note?.description ?? "");
+    d.desc.toggle(!!(note && note.description));
+    d.open.toggle(!phantom);
+    if (!phantom) d.open.onclick = () => plugin.openNote(id);
+
+    const fields = d.fields;
+    fields.textContent = "";
+    const add = (label: string, control: HTMLElement) => {
+      fields.appendChild(el("dt", null, label));
+      const dd = el("dd");
+      dd.appendChild(control);
+      fields.appendChild(dd);
+    };
+
+    if (!phantom && note) {
+      // Status: the same chip as the hover card, and the same write.
+      const status = el("button", "zoomin-card-status s" + (info.status || 0), dossierStatusLabel(info.status));
+      status.type = "button";
+      status.title = "Click to cycle";
+      status.onclick = async () => {
+        status.disabled = true;
+        await plugin.cycleStatus(id);
+        status.disabled = false;
+      };
+      add("Status", status);
+
+      // Parent: a picker over every written note, and a clear.
+      const parent = el("button", "zoomin-field-button", note.parent ? note.parent.label : "None");
+      parent.type = "button";
+      parent.title = note.parent ? note.parent.path + " — click to change" : "Choose a parent";
+      parent.onclick = () => plugin.pickParent(id);
+      add("Parent", clearable(parent, note.parent ? () => this.edit("parent", null) : null, "Remove parent"));
+
+      // Domain is derived from the parent chain, so it is read, never set.
+      const dom = el("div", "zoomin-field-static");
+      const dot = el("span", "zoomin-dot");
+      if (colour) dot.style.background = colour;
+      dom.appendChild(dot);
+      dom.appendChild(el("span", null, note.domain ? note.domain.name : "Unfiled"));
+      if (!note.domain) dom.title = "File this note's parent under a domain to colour it.";
+      add("Domain", dom);
+
+      // Datatype: the category, from the vault's own vocabulary.
+      const select = el("select", "zoomin-assign-select");
+      select.setAttribute("aria-label", "Datatype");
+      const noneOption = el("option", null, "None");
+      noneOption.value = "";
+      select.appendChild(noneOption);
+      const seen = new Set<string>();
+      for (const cat of model.categories()) {
+        const option = el("option", null, cat.name);
+        option.value = cat.name;
+        seen.add(cat.name.toLowerCase());
+        select.appendChild(option);
+      }
+      const current = note.categories.length ? note.categories[0] : info.datatype >= 0 ? model.payload().datatypes[info.datatype].name : "";
+      if (current && !seen.has(current.toLowerCase())) {
+        const extra = el("option", null, current);
+        extra.value = current;
+        select.appendChild(extra);
+      }
+      select.value = current || "";
+      select.onchange = () => this.edit("category", select.value || null);
+      add("Datatype", select);
+
+      // Deadline: the calendar, or nothing.
+      const date = el("input", "zoomin-field-date");
+      date.type = "date";
+      date.setAttribute("aria-label", "Deadline");
+      date.value = note.deadline ?? "";
+      date.onchange = () => {
+        if (date.value) this.edit("deadline", date.value);
+      };
+      add("Deadline", clearable(date, note.deadline ? () => this.edit("deadline", null) : null, "Clear deadline"));
+
+      // Project-ness: one button that flips it. Three sources can answer (your
+      // ruling, the datatype's flag, children) and the flip writes a ruling —
+      // except when the answer it wants is what the automatic sources already
+      // give, in which case it clears the ruling instead, so a note is never
+      // pinned to what the tree would have said anyway.
+      const box = el("div", "zoomin-field-project");
+      const flip = el("button", "zoomin-field-button", note.project.is ? "Remove from projects" : "Make a project");
+      flip.type = "button";
+      flip.onclick = () => {
+        const want = !note.project.is;
+        const value = want === note.project.automatic ? null : want;
+        try {
+          const result = model.setProjectOverride(id, value);
+          if (result.slotCleared) toast("Removed from projects — its priority slot is free again", "ok");
+        } catch (error) {
+          toast(errorMessage(error));
+        }
+      };
+      box.appendChild(flip);
+      add("Project", box);
+    }
+
+    // Links, both ways. A hierarchy edge is named for what it means from
+    // here: the note this one hangs off, or a note that hangs off this one.
+    const links = model.neighbours(id);
+    const sort = (a: { path: string; kind: number }, b: { path: string; kind: number }) => {
+      const la = model.nodeInfo(a.path), lb = model.nodeInfo(b.path);
+      return b.kind - a.kind || (la && lb ? la.label.localeCompare(lb.label, undefined, { sensitivity: "base" }) : 0);
+    };
+    this.fill(d.out, links.out.sort(sort), "parent");
+    this.fill(d.in, links.in.sort(sort), "child");
+    d.count.setText(String(links.out.length + links.in.length) || "");
+  }
+
+  private fill(list: HTMLElement, entries: { path: string; kind: number }[], hierarchyWord: string): void {
+    const model = this.panel.plugin.model;
+    list.textContent = "";
+    for (const entry of entries) {
+      const other = model.nodeInfo(entry.path);
+      if (!other) continue;
+      const shape = other.datatype >= 0 ? model.payload().datatypes[other.datatype].shape : null;
+      list.appendChild(
+        row(other.label, {
+          dotIcon: shapeDot(shape, other.hue),
+          title: entry.path,
+          tag: entry.kind === 1 ? { text: hierarchyWord } : other.kind !== 0 ? { text: "unwritten" } : null,
+          onLabelClick: () => this.panel.plugin.enterFocus(entry.path),
+        }),
+      );
+    }
+    if (!entries.length) {
+      const blank = el("li");
+      blank.appendChild(el("div", "zoomin-row zoomin-empty-note", "Nothing."));
+      list.appendChild(blank);
+    }
+  }
+
+  private edit(field: "parent" | "category" | "deadline", value: string | null): void {
+    const id = this.panel.plugin.focusId;
+    if (!id) return;
+    void this.panel.plugin.model
+      .editNote(id, field, value)
+      .then(() => this.panel.render())
+      .catch((error) => {
+        toast(errorMessage(error));
+        this.panel.render();
+      });
+  }
+
+  private build(root: HTMLElement): void {
+    const d = root.createDiv({ cls: "zoomin-dossier", attr: { "aria-live": "polite" } });
+    d.hide();
+    const bar = d.createDiv({ cls: "zoomin-dossier-bar" });
+    const back = bar.createEl("button", { cls: "zoomin-linkish zoomin-back", text: "← Back to the map", attr: { type: "button" } });
+    back.onclick = () => this.panel.plugin.exitFocus();
+    const open = bar.createEl("button", { cls: "zoomin-ghost", text: "Open ↗", attr: { type: "button" } });
+    open.title = "Open this note in the editor";
+    const eyebrow = d.createEl("p", { cls: "zoomin-dossier-eyebrow" });
+    const title = d.createEl("h2", { cls: "zoomin-dossier-title" });
+    const desc = d.createEl("p", { cls: "zoomin-dossier-desc" });
+    const fields = d.createEl("dl", { cls: "zoomin-dossier-fields" });
+    const links = d.createEl("section", { cls: "zoomin-dossier-links" });
+    const count = links.createEl("h3", { text: "Links " }).createSpan({ cls: "zoomin-slot-summary" });
+    links.createEl("h4", { cls: "zoomin-group-label", text: "Points to" });
+    const out = links.createEl("ul", { cls: "zoomin-list" });
+    links.createEl("h4", { cls: "zoomin-group-label", text: "Pointed at by" });
+    const inn = links.createEl("ul", { cls: "zoomin-list" });
+    this.dossierEl = { root: d, eyebrow, title, desc, open, fields, out, in: inn, count };
   }
 }

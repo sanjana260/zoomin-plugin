@@ -332,3 +332,61 @@ describe("migration from the pywebview app", () => {
     expect(raw.positions["Work.md"]).toEqual([1.5, -2.25]);
   });
 });
+
+describe("the dossier's note view", () => {
+  function noteModel() {
+    const files = {
+      "Work.md": note(null, { frontmatter: { categories: ["[[Projects]]"], status: "Exploring", Description: "Everything done for money.", deadline: "2026-09-20" } }),
+      "Prepay.md": note("Work", { frontmatter: { categories: ["Task"], status: "Exploring" } }),
+      "Aetna.md": note("Prepay", { links: ["Ghost"] }),
+      "Chess.md": note(null, { frontmatter: { categories: ["[[Projects]]"] } }),
+      "Categories/Projects.md": note(),
+    };
+    const m = new ZoomInModel(fakeSource(files), new Store(emptyStore(), () => {}));
+    m.reload();
+    return { m, files };
+  }
+
+  it("reads one note in words: parent, domain, datatype, children, description", () => {
+    const { m } = noteModel();
+    const d = m.createDomain("One");
+    m.assign("Work.md", d);
+    const n = m.note("Prepay.md")!;
+    expect(n.label).toBe("Prepay");
+    expect(n.parent).toEqual({ path: "Work.md", label: "Work" });
+    expect(n.domain).toEqual({ id: d, name: "One", hue: 204 });
+    expect(n.datatype).toBeNull(); // a category with no datatype row gives no datatype
+    expect(n.status).toBe("exploring");
+    expect(m.note("Work.md")!.children).toBe(1);
+    expect(m.note("Work.md")!.description).toBe("Everything done for money.");
+    expect(m.note("Work.md")!.deadline).toBe("2026-09-20");
+    expect(m.note("Nope.md")).toBeNull();
+  });
+
+  it("names the source that settled project-ness, and what the automatics would say", () => {
+    const { m } = noteModel();
+    // Children: Work is offered, nothing declared.
+    expect(m.projectVerdict("Work.md")).toMatchObject({ is: true, reason: "children", override: null, automatic: true });
+    // A datatype flag outranks children.
+    m.setDatatype("Projects", { project: true });
+    expect(m.projectVerdict("Chess.md")).toMatchObject({ is: true, reason: "datatype" });
+    // A ruling outranks the flag; removing names itself.
+    m.setProjectOverride("Chess.md", false);
+    expect(m.projectVerdict("Chess.md")).toMatchObject({ is: false, reason: "removed", override: false, automatic: true });
+    m.setProjectOverride("Chess.md", null);
+    expect(m.projectVerdict("Chess.md")).toMatchObject({ reason: "datatype" });
+    // Declared by a ruling alone.
+    m.setProjectOverride("Aetna.md", true);
+    expect(m.projectVerdict("Aetna.md")).toMatchObject({ is: true, reason: "declared", override: true, automatic: false });
+  });
+
+  it("splits a note's links by direction", () => {
+    const { m } = noteModel();
+    const links = m.neighbours("Prepay.md");
+    // `out` is what this note points at — its parent; `in` is what points at it.
+    expect(links.out.map((l) => l.path)).toEqual(["Work.md"]);
+    expect(links.out[0].kind).toBe(1); // hierarchy
+    expect(links.in.map((l) => l.path)).toEqual(["Aetna.md"]);
+    expect(m.neighbours("Aetna.md").out.map((l) => l.path)).toEqual(["Prepay.md", "phantom:ghost"]); // its parent, and its mention
+  });
+});
