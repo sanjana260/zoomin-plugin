@@ -1,0 +1,461 @@
+/**
+ * The panel: priorities, domains and projects, in the right sidebar — the
+ * pywebview app's sidebar as a leaf of its own. In phase 5 it also becomes
+ * the dossier of the note under the lens.
+ *
+ * Rendering is imperative rebuild-from-scratch on every model change, as the
+ * app did it: the lists are short and the code stays one function per list.
+ */
+
+import { ItemView, WorkspaceLeaf } from "obsidian";
+import type ZoomInPlugin from "../main";
+import type { DomainView, ProjectView } from "../model";
+import { labelFor } from "../model";
+import { discloseButton, el, emptyNote, errorMessage, iconButton, row, shapeDot, toast } from "./ui";
+
+export const VIEW_PANEL = "zoomin-panel";
+
+// The project list is ranked, and the tail is almost never what you came for.
+// Showing a head keeps the panel readable; the rest is one click away.
+const PROJECT_HEAD = 20;
+
+// Which domains are folded open, and which priority rows are opened up. Both
+// are per-viewer convenience; nothing depends on them surviving. Empty by
+// default: a domain's member list opens only once you ask for it, so the
+// panel is a scannable list of names on first load.
+export const DOMAIN_OPEN_KEY = "zoomin.open-domains";
+export const PRIORITY_OPEN_KEY = "zoomin.priority-domains-open";
+
+export class PanelView extends ItemView {
+  private unsubscribe: (() => void) | null = null;
+  private projectLimit = PROJECT_HEAD;
+  private projectFilter: "all" | "none" = "all";
+  private domainOpen: Record<string, true> = {};
+  private priorityOpen: Record<string, true> = {};
+  private els: {
+    stats: HTMLElement;
+    slotSummary: HTMLElement;
+    priorityEmpty: HTMLElement;
+    priorityProjectsGroup: HTMLElement;
+    priorityProjects: HTMLElement;
+    priorityDomainsGroup: HTMLElement;
+    priorityDomains: HTMLElement;
+    domainName: HTMLInputElement;
+    domainsEmpty: HTMLElement;
+    domainList: HTMLElement;
+    unassignedBox: HTMLInputElement;
+    unassignedCount: HTMLElement;
+    filterNote: HTMLElement;
+    projectsEmpty: HTMLElement;
+    projectList: HTMLElement;
+    projectMore: HTMLButtonElement;
+  } | null = null;
+
+  constructor(leaf: WorkspaceLeaf, private readonly plugin: ZoomInPlugin) {
+    super(leaf);
+    this.navigation = false;
+  }
+
+  getViewType(): string {
+    return VIEW_PANEL;
+  }
+
+  getDisplayText(): string {
+    return "ZoomIn";
+  }
+
+  getIcon(): string {
+    return "list-tree";
+  }
+
+  async onOpen(): Promise<void> {
+    const local = this.plugin.local;
+    this.domainOpen = local.idSet(DOMAIN_OPEN_KEY);
+    this.priorityOpen = local.idSet(PRIORITY_OPEN_KEY);
+
+    const root = this.contentEl;
+    root.empty();
+    root.addClass("zoomin-view", "zoomin-panel");
+    this.build(root);
+    this.unsubscribe = this.plugin.model.onChange(() => this.render());
+    this.render();
+  }
+
+  async onClose(): Promise<void> {
+    this.unsubscribe?.();
+    this.unsubscribe = null;
+    this.els = null;
+    this.contentEl.empty();
+  }
+
+  /* --- skeleton ----------------------------------------------------------- */
+
+  private build(root: HTMLElement): void {
+    const head = root.createDiv({ cls: "zoomin-panel-head" });
+    const line = head.createDiv({ cls: "zoomin-head-line" });
+    line.createEl("h2", { text: "ZoomIn" });
+    const datatypes = line.createEl("button", { cls: "zoomin-ghost", text: "Datatypes", attr: { type: "button" } });
+    datatypes.onclick = () => this.plugin.openDatatypes();
+    const stats = head.createEl("p", { cls: "zoomin-muted zoomin-small" });
+
+    // Priorities.
+    const priorities = root.createEl("section", { cls: "zoomin-section" });
+    const ph = priorities.createEl("h3", { text: "Priorities " });
+    const slotSummary = ph.createSpan({ cls: "zoomin-slot-summary" });
+    const priorityEmpty = priorities.createEl("p", {
+      cls: "zoomin-hint",
+      text: "Nothing prioritised yet, so the whole map reads at full strength. Star a domain to bring it forward and let the rest recede.",
+    });
+    const priorityProjectsGroup = priorities.createDiv({ cls: "zoomin-priority-group" });
+    priorityProjectsGroup.createEl("h4", { cls: "zoomin-group-label", text: "Projects" });
+    const priorityProjects = priorityProjectsGroup.createEl("ul", { cls: "zoomin-list" });
+    const priorityDomainsGroup = priorities.createDiv({ cls: "zoomin-priority-group" });
+    priorityDomainsGroup.createEl("h4", { cls: "zoomin-group-label", text: "Domains" });
+    const priorityDomains = priorityDomainsGroup.createEl("ul", { cls: "zoomin-list" });
+
+    // Domains.
+    const domains = root.createEl("section", { cls: "zoomin-section" });
+    domains.createEl("h3", { text: "Your domains" });
+    const newDomain = domains.createDiv({ cls: "zoomin-new-domain" });
+    const domainName = newDomain.createEl("input", {
+      attr: { type: "text", placeholder: "Name a domain", spellcheck: "false", autocomplete: "off", "aria-label": "New domain name" },
+    });
+    const add = newDomain.createEl("button", { cls: "zoomin-ghost", text: "Add", attr: { type: "button" } });
+    add.onclick = () => this.createDomain();
+    domainName.onkeydown = (event) => {
+      if (event.key === "Enter") {
+        event.preventDefault();
+        this.createDomain();
+      }
+    };
+    const domainsEmpty = domains.createEl("p", {
+      cls: "zoomin-hint",
+      text: "No domains yet. A domain is a region of your life, not a note — name it the way you'd say it out loud, then give it projects below.",
+    });
+    const domainList = domains.createEl("ul", { cls: "zoomin-list" });
+
+    // Projects.
+    const projects = root.createEl("section", { cls: "zoomin-section" });
+    projects.createEl("h3", { text: "Projects" });
+    const filterRow = projects.createDiv({ cls: "zoomin-filter-row" });
+    const filterLabel = filterRow.createEl("label", { cls: "zoomin-check-label" });
+    const unassignedBox = filterLabel.createEl("input", { attr: { type: "checkbox" } });
+    filterLabel.appendText(" Unassigned only ");
+    const unassignedCount = filterLabel.createSpan({ cls: "zoomin-count" });
+    unassignedBox.onchange = () => {
+      this.projectFilter = unassignedBox.checked ? "none" : "all";
+      this.projectLimit = PROJECT_HEAD;
+      this.renderProjects();
+    };
+    projects.createEl("p", {
+      cls: "zoomin-hint",
+      text: "Ranked by how much of your vault hangs off them. Put the ones that belong to a domain into it; a project can sit in only one.",
+    });
+    const filterNote = projects.createEl("p", { cls: "zoomin-hint" });
+    const projectsEmpty = projects.createEl("p", { cls: "zoomin-hint" });
+    const projectList = projects.createEl("ul", { cls: "zoomin-list" });
+    const projectMore = projects.createEl("button", { cls: "zoomin-linkish zoomin-more", attr: { type: "button" } });
+    projectMore.onclick = () => {
+      this.projectLimit = Infinity;
+      this.renderProjects();
+    };
+
+    this.els = {
+      stats, slotSummary, priorityEmpty, priorityProjectsGroup, priorityProjects, priorityDomainsGroup,
+      priorityDomains, domainName, domainsEmpty, domainList, unassignedBox, unassignedCount, filterNote,
+      projectsEmpty, projectList, projectMore,
+    };
+  }
+
+  /* --- actions ------------------------------------------------------------ */
+
+  private act(fn: () => void): void {
+    try {
+      fn();
+    } catch (error) {
+      toast(errorMessage(error));
+      // The control may be left showing a choice the model refused; put it back.
+      this.render();
+    }
+  }
+
+  private createDomain(): void {
+    const input = this.els!.domainName;
+    const name = input.value.trim();
+    if (!name) {
+      input.focus();
+      return;
+    }
+    this.act(() => {
+      this.plugin.model.createDomain(name);
+      input.value = "";
+      input.focus(); // naming several in a row should not need the mouse
+    });
+  }
+
+  private starButton(kind: "domain" | "project", id: string, selected: boolean): HTMLButtonElement {
+    const title = selected ? "Remove from priorities" : "Make a priority";
+    const button = iconButton("zoomin-star", selected ? "★" : "☆", title, () => {
+      this.act(() => this.plugin.model.setSlot(kind, id, !selected));
+    });
+    button.setAttribute("aria-pressed", selected ? "true" : "false");
+    return button;
+  }
+
+  private editButton(domain: DomainView): HTMLButtonElement {
+    return iconButton("zoomin-icon", "✎", "Edit domain — rename and assign projects", () => this.plugin.openDomain(domain.id));
+  }
+
+  // Deleting a domain drops every assignment under it and there is no undo, so
+  // the button asks once rather than acting on a stray click.
+  private deleteButton(domain: DomainView): HTMLButtonElement {
+    const button = el("button", "zoomin-icon danger", "×");
+    button.type = "button";
+    let armed = false;
+    let timer: number | null = null;
+    const disarm = () => {
+      if (timer !== null) window.clearTimeout(timer);
+      armed = false;
+      button.textContent = "×";
+      button.classList.remove("armed");
+      button.title = "Delete domain";
+      button.setAttribute("aria-label", "Delete domain " + domain.name);
+    };
+    disarm();
+    button.onclick = () => {
+      if (!armed) {
+        armed = true;
+        button.textContent = "Delete?";
+        button.classList.add("armed");
+        button.title = "Click again to delete";
+        button.setAttribute("aria-label", "Confirm deleting domain " + domain.name);
+        timer = window.setTimeout(disarm, 4000);
+        return;
+      }
+      if (timer !== null) window.clearTimeout(timer);
+      this.act(() => this.plugin.model.deleteDomain(domain.id));
+    };
+    return button;
+  }
+
+  /* --- rendering ---------------------------------------------------------- */
+
+  render(): void {
+    if (!this.els) return;
+    const stats = this.plugin.model.payload().stats;
+    this.els.stats.setText(`${stats.notes} notes · ${stats.links} links · ${stats.phantoms} unwritten`);
+    this.renderPriorities();
+    this.renderDomains();
+    this.renderProjects();
+  }
+
+  private inheritedTag(project: { inherited: boolean; path: string }, domainName: string) {
+    if (!project.inherited) return null;
+    return { text: "inherited", title: "In " + domainName + " because " + this.parentLabel(project.path) + " is." };
+  }
+
+  private parentLabel(path: string): string {
+    const parent = this.plugin.model.hierarchy.parentOf.get(path);
+    if (!parent) return "its parent";
+    return this.plugin.model.snapshot.notes.get(parent)?.title ?? labelFor(parent);
+  }
+
+  // The members of a domain, as shown under it and under a priority slot.
+  // Read-only in both places: filing happens in the dialog.
+  private memberList(domain: DomainView, controlsFor: ((project: DomainView["projects"][number]) => HTMLElement[]) | null): HTMLUListElement {
+    const nested = el("ul", "zoomin-list");
+    for (const project of domain.projects) {
+      nested.appendChild(
+        row(project.label, {
+          nested: true,
+          hue: domain.hue,
+          tag: this.inheritedTag(project, domain.name),
+          count: project.size ? String(project.size) : "",
+          onLabelClick: () => this.plugin.zoomToNote(project.path),
+          controls: controlsFor ? controlsFor(project) : [],
+        }),
+      );
+    }
+    if (!domain.projects.length) nested.appendChild(emptyNote("Nothing assigned yet."));
+    return nested;
+  }
+
+  // What's actively being worked on under a priority project — a glance-level
+  // answer to "what should I actually touch today" without opening the graph.
+  private exploringList(entries: { path: string; label: string; shape: string | null }[], hue: number | null): HTMLUListElement {
+    const nested = el("ul", "zoomin-list");
+    for (const entry of entries) {
+      nested.appendChild(
+        row(entry.label, { nested: true, dotIcon: shapeDot(entry.shape, hue), onLabelClick: () => this.plugin.zoomToNote(entry.path) }),
+      );
+    }
+    if (!entries.length) nested.appendChild(emptyNote("Nothing exploring right now."));
+    return nested;
+  }
+
+  private renderPriorities(): void {
+    const e = this.els!;
+    const model = this.plugin.model;
+    const priorities = model.priorities();
+    const domains = model.domains();
+    const projects = model.projects();
+    const domainById = (id: string | null) => domains.find((d) => d.id === id) ?? null;
+    const local = this.plugin.local;
+
+    e.slotSummary.setText(`${priorities.domains.length}/${priorities.domainSlots} · ${priorities.projects.length}/${priorities.projectSlots}`);
+    e.priorityProjects.empty();
+    e.priorityDomains.empty();
+    e.priorityEmpty.toggle(priorities.domains.length + priorities.projects.length === 0);
+    e.priorityProjectsGroup.toggle(priorities.projects.length > 0);
+    e.priorityDomainsGroup.toggle(priorities.domains.length > 0);
+    e.priorityDomainsGroup.classList.toggle("after-projects", priorities.projects.length > 0 && priorities.domains.length > 0);
+
+    for (const path of priorities.projects) {
+      const project = projects.find((p) => p.path === path) ?? null;
+      const owner = project ? domainById(project.domainId) : null;
+      const openKey = "proj:" + path;
+      const entries = priorities.exploring[path] ?? [];
+      const open = !!this.priorityOpen[openKey];
+      const details = this.exploringList(entries, owner ? owner.hue : null);
+      details.toggle(open);
+      const label = project ? project.label : labelFor(path);
+      const item = row(label, {
+        hue: owner ? owner.hue : null,
+        count: owner ? owner.name : "",
+        title: owner ? path + " — in " + owner.name : path,
+        onLabelClick: project ? () => this.plugin.zoomToNote(path) : null,
+        leading: [
+          discloseButton(open, "Show what is exploring under " + label, (button) => {
+            local.toggleIn(PRIORITY_OPEN_KEY, this.priorityOpen, openKey);
+            const nowOpen = !!this.priorityOpen[openKey];
+            button.setAttribute("aria-expanded", nowOpen ? "true" : "false");
+            details.toggle(nowOpen);
+          }),
+        ],
+        controls: [this.starButton("project", path, true)],
+      });
+      item.appendChild(details);
+      e.priorityProjects.appendChild(item);
+    }
+
+    for (const id of priorities.domains) {
+      const domain = domainById(id);
+      if (!domain) {
+        e.priorityDomains.appendChild(row(id, { count: "missing", controls: [this.starButton("domain", id, true)] }));
+        continue;
+      }
+      const open = !!this.priorityOpen[id];
+      const members = this.memberList(domain, null);
+      members.toggle(open);
+      const item = row(domain.name, {
+        hue: domain.hue,
+        count: domain.projects.length ? String(domain.projects.length) : "",
+        title: "Zoom to " + domain.name + " on the map",
+        onLabelClick: () => this.plugin.zoomToDomain(domain.id),
+        leading: [
+          discloseButton(open, "Show what is in " + domain.name, (button) => {
+            local.toggleIn(PRIORITY_OPEN_KEY, this.priorityOpen, id);
+            const nowOpen = !!this.priorityOpen[id];
+            button.setAttribute("aria-expanded", nowOpen ? "true" : "false");
+            members.toggle(nowOpen);
+          }),
+        ],
+        controls: [this.editButton(domain), this.starButton("domain", id, true)],
+      });
+      item.appendChild(members);
+      e.priorityDomains.appendChild(item);
+    }
+  }
+
+  private renderDomains(): void {
+    const e = this.els!;
+    const model = this.plugin.model;
+    const priorities = model.priorities();
+    const domains = model.domains();
+    const local = this.plugin.local;
+    e.domainList.empty();
+    e.domainsEmpty.toggle(domains.length === 0);
+
+    for (const domain of domains) {
+      const collapsed = !this.domainOpen[domain.id];
+      const members = this.memberList(domain, (project) => [
+        this.starButton("project", project.path, priorities.projects.includes(project.path)),
+        iconButton("zoomin-icon", "−", "Remove from this domain", () => this.act(() => model.assign(project.path, null))),
+      ]);
+      members.toggle(!collapsed);
+      const item = row(domain.name, {
+        hue: domain.hue,
+        count: domain.projects.length ? String(domain.projects.length) : "",
+        title: "Zoom to " + domain.name + " on the map",
+        onLabelClick: () => this.plugin.zoomToDomain(domain.id),
+        leading: [
+          discloseButton(!collapsed, "Show the projects in " + domain.name, (button) => {
+            local.toggleIn(DOMAIN_OPEN_KEY, this.domainOpen, domain.id);
+            const open = !!this.domainOpen[domain.id];
+            button.setAttribute("aria-expanded", open ? "true" : "false");
+            members.toggle(open);
+          }),
+        ],
+        controls: [this.editButton(domain), this.starButton("domain", domain.id, priorities.domains.includes(domain.id)), this.deleteButton(domain)],
+      });
+      item.appendChild(members);
+      e.domainList.appendChild(item);
+    }
+  }
+
+  private renderProjects(): void {
+    const e = this.els!;
+    const model = this.plugin.model;
+    const projects = model.projects();
+    const domains = model.domains();
+    const unassigned = projects.filter((p) => !p.domainId);
+    const visible: ProjectView[] = this.projectFilter === "none" ? unassigned : projects;
+    const filtering = this.projectFilter !== "all";
+
+    e.unassignedBox.checked = filtering;
+    // Always shown, zero included: "(0)" says everything is filed, whereas a
+    // blank space just reads as a control that failed to render.
+    e.unassignedCount.setText("(" + unassigned.length + ")");
+    e.projectList.empty();
+
+    e.projectsEmpty.toggle(visible.length === 0);
+    e.projectsEmpty.setText(
+      !projects.length ? "No projects in this vault yet." : filtering ? "Every project is filed in a domain." : "No projects in this vault yet.",
+    );
+    e.filterNote.toggle(filtering);
+    if (filtering) e.filterNote.setText(visible.length + " unassigned of " + projects.length + " projects.");
+
+    for (const project of visible.slice(0, this.projectLimit)) {
+      const owner = domains.find((d) => d.id === project.domainId) ?? null;
+      const item = row(project.label, {
+        hue: owner ? owner.hue : null,
+        title: project.path,
+        tag: owner ? this.inheritedTag(project, owner.name) : null,
+        count: project.size ? String(project.size) : "",
+        onLabelClick: () => this.plugin.zoomToNote(project.path),
+      });
+
+      const field = el("div", "zoomin-assign");
+      field.appendChild(el("label", "zoomin-assign-label", "Domain"));
+      const select = el("select", "zoomin-assign-select");
+      select.setAttribute("aria-label", "Domain for " + project.label);
+      const none = el("option", null, "Unassigned");
+      none.value = "";
+      select.appendChild(none);
+      for (const domain of domains) {
+        const option = el("option", null, domain.name);
+        option.value = domain.id;
+        select.appendChild(option);
+      }
+      select.value = project.domainId ?? "";
+      select.onchange = () => this.act(() => model.assign(project.path, select.value || null));
+      field.appendChild(select);
+      item.appendChild(field);
+      e.projectList.appendChild(item);
+    }
+
+    const remaining = visible.length - Math.min(this.projectLimit, visible.length);
+    e.projectMore.toggle(remaining > 0);
+    if (remaining > 0) e.projectMore.setText("Show " + remaining + " more");
+  }
+}

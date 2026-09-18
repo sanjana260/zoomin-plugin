@@ -1,0 +1,94 @@
+{
+  "settings": {
+    "domainSlots": 4,
+    "projectSlots": 2,
+    "followActiveFile": true
+  },
+  "store": {
+    "version": 1,
+    "domains": [
+      {
+        "id": "221d2acc-e6f7-43bc-b273-9c8b459fbb84",
+        "name": "School",
+        "createdAt": 1789739671,
+        "retiredAt": null
+      },
+      {
+        "id": "f57856e3-4dc2-4d9e-af29-f1a45294dfee",
+        "name": "Life Admin",
+        "createdAt": 1789739671,
+        "retiredAt": null
+      }
+    ],
+    "assignments": {
+      "Work.md": "221d2acc-e6f7-43bc-b273-9c8b459fbb84",
+      "Prepay.md": null,
+      "Chess.md": "f57856e3-4dc2-4d9e-af29-f1a45294dfee"
+    },
+    "slots": [
+      {
+        "kind": "domain",
+        "key": "221d2acc-e6f7-43bc-b273-9c8b459fbb84",
+        "since": 1789739671
+      }
+    ],
+    "slotHistory": [
+      {
+        "ts": 1789739671,
+        "kind": "domain",
+        "action": "fill",
+        "key": "221d2acc-e6f7-43bc-b273-9c8b459fbb84"
+      },
+      {
+        "ts": 1789739671,
+        "kind": "project",
+        "action": "fill",
+        "key": "Work.md"
+      },
+      {
+        "ts": 1789739671,
+        "kind": "project",
+        "action": "clear",
+        "key": "Work.md"
+      }
+    ],
+    "datatypes": [
+      {
+        "id": "c40fc18d-4744-4a7d-a33f-b58845737be2",
+        "name": "Task",
+        "shape": "diamond",
+        "isProject": false,
+        "createdAt": 1789739671
+      },
+      {
+        "id": "df3c92f5-b2df-4061-979a-6c248130a593",
+        "name": "Projects",
+        "shape": null,
+        "isProject": true,
+        "createdAt": 1789739671
+      }
+    ],
+    "projectOverrides": {
+      "Aetna.md": true
+    },
+    "taskOrder": {
+      "domains": [
+        "Chess.md",
+        "Work.md"
+      ],
+      "focus:Work.md": [
+        "Prepay.md"
+      ]
+    }
+  },
+  "positions": {
+    "Work.md": [
+      1.5,
+      -2.25
+    ],
+    "Chess.md": [
+      10.0,
+      20.0
+    ]
+  }
+}
