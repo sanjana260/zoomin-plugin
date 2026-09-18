@@ -1,0 +1,30 @@
+# Tag a release and this builds the plugin and attaches the three files
+# Obsidian expects, as a draft. Publish the draft and BRAT/manual installs
+# pick it up. versions.json and manifest.json must agree — `npm version`
+# runs version-bump.mjs for you.
+name: Release
+
+on:
+  push:
+    tags:
+      - "*"
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: npm install
+      - run: npm run build
+      - uses: ncipollo/release-action@v1
+        with:
+          artifacts: "main.js,manifest.json,styles.css"
+          token: ${{ secrets.GITHUB_TOKEN }}
+          draft: true
+          allowUpdates: true

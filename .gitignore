@@ -1,0 +1,6 @@
+node_modules/
+main.js
+# a vault symlinked to this folder writes its state here
+data.json
+# the throwaway vault generated next to a standalone checkout
+test-vault/
