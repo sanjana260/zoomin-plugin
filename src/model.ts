@@ -17,8 +17,10 @@
 import { DOMAIN_HUES, Member, buildPayload, domainMembers, effectiveDomain, shapeIndex, shapeOf } from "./graph/build";
 import { Hierarchy, TreeNode, buildHierarchy } from "./graph/hierarchy";
 import { Store } from "./state/store";
-import { Datatype, GraphPayload, LinkKind, Positions, VaultSnapshot, fold } from "./types";
+import { Datatype, GraphPayload, LinkKind, Positions, STATUSES, Status, VaultSnapshot, fold } from "./types";
+import { categoryNames } from "./vault/categories";
 import { CATEGORY_DIR, CacheSource, buildSnapshot } from "./vault/snapshot";
+import { FrontmatterWriter, nextStatus, setCategory, setDeadline, setParent, setStatus } from "./vault/write";
 
 export type ChangeListener = (structural: boolean) => void;
 
@@ -78,8 +80,14 @@ export class ZoomInModel {
   constructor(
     private readonly source: CacheSource,
     public readonly store: Store,
+    private readonly writer: FrontmatterWriter | null = null,
   ) {
     store.knows = (path) => this.snapshot.notes.has(path);
+  }
+
+  /** Whether this model can write to the vault at all (a writer was wired in). */
+  get canWrite(): boolean {
+    return this.writer !== null;
   }
 
   onChange(listener: ChangeListener): () => void {
@@ -262,6 +270,24 @@ export class ZoomInModel {
    * notes are never used.
    */
   categories(): CategoryView[] {
+    const { counts, display, inFolder } = this.categoryCensus();
+    const datatypes = new Map<string, Datatype>();
+    for (const d of this.store.datatypes()) datatypes.set(fold(d.name), d);
+    const rows: CategoryView[] = [...counts.keys()].map((key) => ({
+      name: display.get(key)!,
+      count: counts.get(key) ?? 0,
+      inFolder: inFolder.has(key),
+      shape: datatypes.get(key)?.shape ?? null,
+      project: datatypes.get(key)?.isProject ?? false,
+    }));
+    // Most-used first: the categories worth distinguishing are the ones you
+    // actually have notes in. Ties break alphabetically so the list is stable.
+    rows.sort((a, b) => b.count - a.count || a.name.toLowerCase().localeCompare(b.name.toLowerCase()));
+    return rows;
+  }
+
+  /** (count, display label, in the `Categories/` folder) per folded name. */
+  private categoryCensus(): { counts: Map<string, number>; display: Map<string, string>; inFolder: Set<string> } {
     const counts = new Map<string, number>();
     // Spellings seen, per folded name. `Task` and `TASK` are one category,
     // but one of them has to be the label — and picking whichever note the
@@ -292,19 +318,35 @@ export class ZoomInModel {
       seen.sort((a, b) => b[1] - a[1] || (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0));
       return seen[0][0];
     };
-    const datatypes = new Map<string, Datatype>();
-    for (const d of this.store.datatypes()) datatypes.set(fold(d.name), d);
-    const rows: CategoryView[] = [...counts.keys()].map((key) => ({
-      name: label(key),
-      count: counts.get(key) ?? 0,
-      inFolder: folderTitle.has(key),
-      shape: datatypes.get(key)?.shape ?? null,
-      project: datatypes.get(key)?.isProject ?? false,
-    }));
-    // Most-used first: the categories worth distinguishing are the ones you
-    // actually have notes in. Ties break alphabetically so the list is stable.
-    rows.sort((a, b) => b.count - a.count || a.name.toLowerCase().localeCompare(b.name.toLowerCase()));
-    return rows;
+    const display = new Map<string, string>();
+    for (const key of counts.keys()) display.set(key, label(key));
+    return { counts, display, inFolder: new Set(folderTitle.keys()) };
+  }
+
+  /**
+   * Whether the vault writes this category as `[[Name]]` or bare `Name`.
+   *
+   * The vault has a habit per category rather than one rule: Task, Idea and
+   * Reference are always bare, Meetings, Projects and People always linked,
+   * Entry split 29 to 11. So the form is the one the notes already use most
+   * for that name, counted over the raw values; a tie, or a category no note
+   * uses yet, is linked exactly when there is a note in `Categories/` for the
+   * link to land on.
+   */
+  categoryPrefersWikilink(key: string, inFolder: Set<string>): boolean {
+    let linked = 0, bare = 0;
+    for (const note of this.snapshot.notes.values()) {
+      const raw = note.frontmatter["categories"];
+      for (const item of Array.isArray(raw) ? raw : [raw]) {
+        if (typeof item !== "string") continue;
+        const names = categoryNames([item]);
+        if (!names.length || fold(names[0]) !== key) continue;
+        if (item.trim().replace(/^["']/, "").startsWith("[[")) linked++;
+        else bare++;
+      }
+    }
+    if (linked !== bare) return linked > bare;
+    return inFolder.has(key);
   }
 
   /* --- writes to app state ------------------------------------------------ */
@@ -388,6 +430,119 @@ export class ZoomInModel {
       this.store.clearSlot(kind, key);
     }
     this.emit(false);
+  }
+
+  /* --- writes to the vault ------------------------------------------------ */
+
+  private requireWriter(): FrontmatterWriter {
+    if (!this.writer) throw new Error("ZoomIn cannot write to this vault");
+    return this.writer;
+  }
+
+  /**
+   * Advance a note's status, in the vault itself — and everything under it.
+   *
+   * The clicked note cycles (or is set, when `status` is given); its whole
+   * subtree is then *set* to the result rather than cycled, so a parent and
+   * its descendants always land on one status. "Work is explored" with
+   * Prepay's children still exploring would be a contradiction, and marking
+   * them by hand one at a time was the chore this exists to remove.
+   *
+   * Each file is written on its own, and the set is not a transaction: a
+   * failure part-way leaves the earlier notes changed. The error says how far
+   * it got, and a second click finishes the job. Only frontmatter moved, so
+   * the notes are patched in memory and the map recolours at once; the
+   * vault's own change event follows and confirms it.
+   */
+  async setStatus(path: string, status: Status | null = null): Promise<{ status: Status; cascaded: number }> {
+    const writer = this.requireWriter();
+    const note = this.snapshot.notes.get(path);
+    if (!note) throw new Error(`no such note: ${path}`);
+    if (status !== null && !(STATUSES as readonly string[]).includes(status)) throw new Error(`unknown status ${status}`);
+    const target = status ?? nextStatus(note.status);
+    const paths = [path, ...this.hierarchy.descendants(path)];
+    let written = 0;
+    try {
+      for (const p of paths) {
+        await setStatus(writer, p, target);
+        this.snapshot.notes.get(p)!.status = target;
+        written++;
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      this.emit(false);
+      throw new Error(`${message} (stopped after ${written} of ${paths.length})`);
+    }
+    this.emit(false);
+    return { status: target, cascaded: written - 1 };
+  }
+
+  /** Whether more than one note shares this stem — when only a pathed link lands on the right one. */
+  private stemIsAmbiguous(stem: string): boolean {
+    let n = 0;
+    const key = fold(stem);
+    for (const note of this.snapshot.notes.values()) if (fold(note.title) === key && ++n > 1) return true;
+    return false;
+  }
+
+  /**
+   * Set a note's parent, category or deadline, in the vault itself.
+   *
+   * A parent change moves hierarchy edges, subtree sizes and inherited
+   * domains — the structure is genuinely new, so the vault is re-read. A
+   * category or deadline moves only frontmatter, so the note is patched in
+   * memory the way a status write is. Re-parenting a note under its own
+   * descendant is refused rather than written and untangled later.
+   */
+  async editNote(path: string, field: "parent" | "category" | "deadline", rawValue: string | null): Promise<{ structural: boolean }> {
+    const writer = this.requireWriter();
+    const note = this.snapshot.notes.get(path);
+    if (!note) throw new Error(`no such note: ${path}`);
+    const trimmed = rawValue?.trim() ?? "";
+    const value: string | null = trimmed || null; // an empty string is a clear, not a value
+
+    if (field === "parent") {
+      let target: string | null = null;
+      if (value !== null) {
+        if (!this.snapshot.notes.has(value)) throw new Error(`no such note: ${value}`);
+        // A note above itself, at any distance, is a loop: `Parent:` is
+        // hand-written and the walkers are cycle-safe, but the map should
+        // not be the thing that writes one.
+        if (value === path || this.hierarchy.ancestors(value).includes(path)) {
+          throw new Error(`${labelFor(value)} is under ${labelFor(path)}; filing it above would make a loop`);
+        }
+        const stem = labelFor(value);
+        target = this.stemIsAmbiguous(stem) ? value.replace(/\.md$/, "") : stem;
+      }
+      await setParent(writer, path, target);
+      this.reload();
+      return { structural: true };
+    }
+
+    if (field === "category") {
+      let name: string | null = null;
+      let wikilink = false;
+      if (value !== null) {
+        const { display, inFolder } = this.categoryCensus();
+        const key = fold(value);
+        // A known category takes its established spelling; a new one is
+        // written as typed, and bare unless the folder says otherwise.
+        name = display.get(key) ?? value;
+        wikilink = this.categoryPrefersWikilink(key, inFolder);
+      }
+      await setCategory(writer, path, name, wikilink);
+      note.categories = name ? [name] : [];
+      // A category can be a project datatype, so the note may have just
+      // become (or stopped being) a project; the tree is re-derived from the
+      // patched snapshot without touching the disk.
+      this.rebuild(false);
+      return { structural: false };
+    }
+
+    await setDeadline(writer, path, value);
+    note.deadline = value;
+    this.emit(false);
+    return { structural: false };
   }
 
   /** The layout settled. Kept in memory so a rebuild seeds from it; the

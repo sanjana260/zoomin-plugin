@@ -213,6 +213,10 @@
 /* A domain's name is the door to its dialog. It reads as text until you go
    near it, because a sidebar full of buttons reads as a toolbar. */
 .zoomin-view .zoomin-name-button {
+  /* Obsidian's button reset is inline-flex with centred content; a name is
+     a line of text and reads from the left like the rows around it. */
+  display: block;
+  justify-content: flex-start;
   text-align: left;
   font: inherit;
   font-size: 13.5px;

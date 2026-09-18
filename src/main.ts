@@ -13,12 +13,13 @@
  * in the views.
  */
 
-import { Plugin, TAbstractFile, TFile, WorkspaceLeaf, debounce } from "obsidian";
+import { Notice, Plugin, TAbstractFile, TFile, WorkspaceLeaf, debounce } from "obsidian";
 import { ZoomInModel } from "./model";
 import { DEFAULT_SETTINGS, ZoomInSettingTab, ZoomInSettings } from "./settings";
 import { LocalState } from "./state/local";
 import { Store, StoreData, upgrade } from "./state/store";
 import { appSource } from "./vault/snapshot";
+import { STATUS_LABELS, appWriter } from "./vault/write";
 import { DatatypesModal } from "./views/datatypes-modal";
 import { DomainModal } from "./views/domain-modal";
 import { GraphView, VIEW_GRAPH } from "./views/graph-view";
@@ -63,7 +64,7 @@ export default class ZoomInPlugin extends Plugin {
       this.local.savePositions(raw.positions);
       this.scheduleSave();
     }
-    this.model = new ZoomInModel(appSource(this.app), store);
+    this.model = new ZoomInModel(appSource(this.app), store, appWriter(this.app));
     this.model.positions = this.local.positions();
     this.applyCaps();
 
@@ -75,6 +76,16 @@ export default class ZoomInPlugin extends Plugin {
     this.addCommand({ id: "open-graph", name: "Open map", callback: () => void this.openGraph() });
     this.addCommand({ id: "open-panel", name: "Open panel", callback: () => void this.openPanel() });
     this.addCommand({ id: "open-datatypes", name: "Edit datatypes", callback: () => this.openDatatypes() });
+    this.addCommand({
+      id: "cycle-status-active",
+      name: "Cycle status of the active note",
+      checkCallback: (checking) => {
+        const file = this.app.workspace.getActiveFile();
+        if (!file || !this.model.snapshot.notes.has(file.path)) return false;
+        if (!checking) void this.cycleStatus(file.path);
+        return true;
+      },
+    });
 
     // The cache is not complete while Obsidian is still starting; build once
     // the workspace is up, then follow the vault. `changed` covers a new or
@@ -188,10 +199,21 @@ export default class ZoomInPlugin extends Plugin {
 
   exitFocus(): void {}
 
-  /** Whether the vault can be written from here. Phase 3 turns this on. */
+  /** Whether the vault can be written from here. */
   canWrite(): boolean {
-    return false;
+    return this.model.canWrite;
   }
 
-  async cycleStatus(_path: string): Promise<void> {}
+  /** Advance a note's status and everything under it; say so if it cascaded. */
+  async cycleStatus(path: string): Promise<void> {
+    try {
+      const result = await this.model.setStatus(path);
+      // A click that just rewrote a subtree should say so.
+      if (result.cascaded > 0) {
+        new Notice(`${STATUS_LABELS[result.status]} — and ${result.cascaded} note${result.cascaded === 1 ? "" : "s"} under it`, 1800);
+      }
+    } catch (error) {
+      new Notice(error instanceof Error ? error.message : String(error), 4000);
+    }
+  }
 }

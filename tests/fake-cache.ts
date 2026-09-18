@@ -8,6 +8,7 @@
 import type { CachedMetadata, EmbedCache, LinkCache } from "obsidian";
 import { buildSnapshot, CacheFile, CacheSource } from "../src/vault/snapshot";
 import type { VaultSnapshot } from "../src/types";
+import type { Frontmatter, FrontmatterWriter } from "../src/vault/write";
 
 export interface NoteSpec {
   frontmatter?: Record<string, unknown>;
@@ -81,4 +82,26 @@ export function fakeSource(files: Record<string, NoteSpec | string>): CacheSourc
 
 export function assemble(files: Record<string, NoteSpec | string>): VaultSnapshot {
   return buildSnapshot(fakeSource(files));
+}
+
+/**
+ * A writer over the same specs: edits land in the spec's frontmatter object,
+ * so the next `cache()` read sees them the way Obsidian's cache would after
+ * `processFrontMatter`. Records every write for assertions.
+ */
+export function fakeWriter(files: Record<string, NoteSpec | string>): FrontmatterWriter & { writes: [string, Frontmatter][]; failOn: Set<string> } {
+  const writes: [string, Frontmatter][] = [];
+  const failOn = new Set<string>();
+  return {
+    writes,
+    failOn,
+    async process(path, edit) {
+      if (failOn.has(path)) throw new Error(`disk full writing ${path}`);
+      const spec = files[path];
+      if (!spec || typeof spec === "string") throw new Error(`no such note: ${path}`);
+      spec.frontmatter = spec.frontmatter ?? {};
+      edit(spec.frontmatter as Frontmatter);
+      writes.push([path, JSON.parse(JSON.stringify(spec.frontmatter))]);
+    },
+  };
 }
