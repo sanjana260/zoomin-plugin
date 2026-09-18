@@ -37,9 +37,14 @@ import subprocess
 from datetime import date, timedelta
 from pathlib import Path
 
-REPO = Path(__file__).resolve().parents[2]
-PLUGIN_DIR = REPO / "plugin"
-DEFAULT_DIR = REPO / "test-vault"
+HERE = Path(__file__).resolve()
+PLUGIN_DIR = HERE.parents[1]
+# In the ZoomIn monorepo the vault goes next to plugin/ at the repo root; in a
+# standalone checkout of the plugin there is no repo root to share, so it goes
+# beside the repository instead — either way, out of the plugin folder itself,
+# which vaults symlink to.
+_MONOREPO = next((p for p in PLUGIN_DIR.parents if (p / "design.md").is_file()), None)
+DEFAULT_DIR = (_MONOREPO or PLUGIN_DIR.parent) / "test-vault"
 
 
 def frontmatter(**fields: object) -> str:
