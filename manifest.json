@@ -1,7 +1,7 @@
 {
   "id": "zoomin",
   "name": "ZoomIn",
-  "version": "0.1.0",
+  "version": "1.0.0-alpha.1",
   "minAppVersion": "1.5.0",
   "description": "Your vault as a map of attention: a force-directed graph where the regions you have not prioritised recede, a task dashboard, and a lens on one note.",
   "author": "Sanjana Mohan",
