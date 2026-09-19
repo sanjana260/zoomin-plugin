@@ -1,8 +1,9 @@
 /**
  * The panel: priorities, domains and projects, in the right sidebar — and,
- * while a note is under the lens, that note's dossier instead. The map
+ * while a note is under the lens, that note's dossier instead; or, in tracker
+ * mode, the map itself, kept framed on the note open in the editor. The map
  * answers "where am I"; the dossier answers "what is this, and what is it
- * wired to".
+ * wired to"; the tracker keeps "where am I" answered while you surf.
  *
  * Rendering is imperative rebuild-from-scratch on every model change, as the
  * app did it: the lists are short and the code stays one function per list.
@@ -14,6 +15,8 @@ import { ItemView, WorkspaceLeaf, setIcon } from "obsidian";
 import type ZoomInPlugin from "../main";
 import type { DomainView, NoteView, ProjectView } from "../model";
 import { labelFor } from "../model";
+import { GraphRenderer } from "./renderer";
+import { isDarkTheme } from "./graph-view";
 import { checkbox, discloseButton, el, emptyNote, errorMessage, iconButton, row, shapeDot, swatch, tag, toast } from "./ui";
 
 export const VIEW_PANEL = "zoomin-panel";
@@ -29,6 +32,10 @@ const PROJECT_HEAD = 20;
 export const DOMAIN_OPEN_KEY = "zoomin.open-domains";
 export const PRIORITY_OPEN_KEY = "zoomin.priority-domains-open";
 
+// Whether the panel is showing the map instead of the sections. Per device:
+// it is a property of this screen's arrangement, like a fold.
+export const TRACKER_KEY = "zoomin.tracker";
+
 export class PanelView extends ItemView {
   private unsubscribe: (() => void) | null = null;
   private projectLimit = PROJECT_HEAD;
@@ -37,6 +44,11 @@ export class PanelView extends ItemView {
   private priorityOpen: Record<string, true> = {};
   sectionsEl: HTMLElement | null = null;
   private dossierRenderer: DossierRenderer | null = null;
+  private tracking = false;
+  private trackerRoot: HTMLElement | null = null;
+  private trackerHost: HTMLElement | null = null;
+  private tracker: GraphRenderer | null = null;
+  private lastTracked: string | null = null;
   private els: {
     slotSummary: HTMLElement;
     priorityEmpty: HTMLElement;
@@ -76,13 +88,15 @@ export class PanelView extends ItemView {
     const local = this.plugin.local;
     this.domainOpen = local.idSet(DOMAIN_OPEN_KEY);
     this.priorityOpen = local.idSet(PRIORITY_OPEN_KEY);
+    this.tracking = local.flag(TRACKER_KEY);
 
     const root = this.contentEl;
     root.empty();
     root.addClass("zoomin-view", "zoomin-panel");
     this.build(root);
+    this.buildTracker(root);
     this.dossierRenderer = new DossierRenderer(this);
-    this.unsubscribe = this.plugin.model.onChange(() => this.render());
+    this.unsubscribe = this.plugin.model.onChange((structural) => this.render(structural));
     this.render();
   }
 
@@ -92,12 +106,18 @@ export class PanelView extends ItemView {
     this.render();
   }
 
+  onResize(): void {
+    this.tracker?.resize();
+  }
+
   async onClose(): Promise<void> {
     this.unsubscribe?.();
     this.unsubscribe = null;
     this.els = null;
     this.sectionsEl = null;
     this.dossierRenderer = null;
+    this.tracker?.destroy();
+    this.tracker = null;
     this.contentEl.empty();
   }
 
@@ -109,6 +129,12 @@ export class PanelView extends ItemView {
     line.createEl("h2", { text: "ZoomIn" });
     const datatypes = line.createEl("button", { cls: "zoomin-ghost", text: "Datatypes", attr: { type: "button" } });
     datatypes.onclick = () => this.plugin.openDatatypes();
+    const map = line.createEl("button", {
+      cls: "zoomin-ghost",
+      attr: { type: "button", "aria-label": "Show the map here", title: "Show the map here" },
+    });
+    setIcon(map, "map");
+    map.onclick = () => this.setTrackerMode(true);
 
     // Priorities.
     const priorities = root.createEl("section", { cls: "zoomin-section" });
@@ -255,8 +281,16 @@ export class PanelView extends ItemView {
 
   /* --- rendering ---------------------------------------------------------- */
 
-  render(): void {
+  render(structural = false): void {
     if (!this.els) return;
+    // The tracker is a place, not a list: the leaf stops scrolling and the
+    // map takes what is left under its head.
+    if (this.tracking) this.contentEl.addClass("zoomin-tracking");
+    else this.contentEl.removeClass("zoomin-tracking");
+    if (this.tracking) {
+      this.renderTracker(structural);
+      return;
+    }
     if (this.plugin.focusId !== null) {
       this.dossierRenderer?.render(this.plugin.focusId);
       return;
@@ -267,6 +301,99 @@ export class PanelView extends ItemView {
     this.renderPriorities();
     this.renderDomains();
     this.renderProjects();
+  }
+
+  /* --- the tracker: the map, living in the sidebar ------------------------- */
+
+  /** Whether the panel is showing the map instead of the sections. */
+  get trackerMode(): boolean {
+    return this.tracking;
+  }
+
+  /** Swap the panel between its sections and the map that tracks the editor. */
+  setTrackerMode(on: boolean): void {
+    if (on === this.tracking) return;
+    this.tracking = on;
+    this.plugin.local.saveFlag(TRACKER_KEY, on);
+    if (!on) {
+      // The tracker's simulation is not worth keeping idle: a fresh one costs
+      // nothing and re-seeds from the saved positions.
+      this.tracker?.destroy();
+      this.tracker = null;
+      this.lastTracked = null;
+      this.trackerRoot?.hide();
+    }
+    this.render(true);
+  }
+
+  /** The note open in the editor moved; frame it, when we are the tracker. */
+  trackPath(path: string): void {
+    if (!this.tracking) return;
+    this.framePath(path);
+  }
+
+  /** The plugin noticed a theme change; the tracker cannot see it itself. */
+  retint(): void {
+    this.tracker?.setDark(isDarkTheme());
+  }
+
+  private renderTracker(structural: boolean): void {
+    this.contentEl.removeClass("zoomin-focusing");
+    this.dossierRenderer?.hide();
+    this.sectionsEl?.hide();
+    this.trackerRoot?.show();
+    if (!this.trackerHost) return;
+    if (!this.tracker) {
+      // A host the environment cannot draw on (tests, exotic shells) must not
+      // take the mode down with it: probe before handing the host over.
+      if (!document.createElement("canvas").getContext("2d")) return;
+      try {
+        this.tracker = new GraphRenderer(this.trackerHost, {
+          dark: isDarkTheme(),
+          // No hover card, no position saves, no background click: the tracker
+          // is a place, not a second dashboard. A node click hands you to the
+          // big map, the way a panel row does.
+          onSelect: (node) => this.plugin.zoomToNote(node.id),
+        });
+        this.tracker.setFilter({});
+        this.tracker.setData(this.plugin.model.payload());
+      } catch {
+        this.tracker = null;
+        return;
+      }
+      // The leaf may not have been measured when the data landed.
+      requestAnimationFrame(() => this.tracker?.resize());
+    }
+    if (structural) this.tracker.setData(this.plugin.model.payload());
+    else this.tracker.applyFocus(this.plugin.model.payload());
+    this.trackActive(true);
+  }
+
+  /** Frame the note being read. */
+  private trackActive(force: boolean): void {
+    const file = this.plugin.app?.workspace.getActiveFile?.() ?? null;
+    if (file) this.framePath(file.path, force);
+  }
+
+  private framePath(path: string, force = false): void {
+    if (!this.tracker || (path === this.lastTracked && !force)) return;
+    this.lastTracked = path;
+    this.tracker.centerOnNode(path);
+  }
+
+  private buildTracker(root: HTMLElement): void {
+    const rootEl = root.createDiv({ cls: "zoomin-tracker" });
+    rootEl.hide();
+    const line = rootEl.createDiv({ cls: "zoomin-head-line zoomin-tracker-head" });
+    line.createEl("h2", { text: "ZoomIn" });
+    const back = line.createEl("button", {
+      cls: "zoomin-ghost",
+      attr: { type: "button", "aria-label": "Back to priorities", title: "Back to priorities" },
+    });
+    setIcon(back, "list-tree");
+    back.onclick = () => this.setTrackerMode(false);
+    this.trackerHost = rootEl.createDiv({ cls: "zoomin-tracker-map" });
+    this.trackerRoot = rootEl;
   }
 
   private inheritedTag(project: { inherited: boolean; path: string }, domainName: string) {

@@ -81,6 +81,7 @@ export default class ZoomInPlugin extends Plugin {
     this.addCommand({ id: "open-panel", name: "Open panel", callback: () => void this.openPanel() });
     this.addCommand({ id: "open-tasks", name: "Open tasks", callback: () => void this.openTasks() });
     this.addCommand({ id: "open-datatypes", name: "Edit datatypes", callback: () => this.openDatatypes() });
+    this.addCommand({ id: "toggle-sidebar-map", name: "Toggle the map in the sidebar", callback: () => void this.toggleSidebarMap() });
     this.addCommand({
       id: "focus-on-note",
       name: "Focus on note…",
@@ -118,19 +119,21 @@ export default class ZoomInPlugin extends Plugin {
       this.registerEvent(this.app.metadataCache.on("changed", () => this.scheduleReload()));
       this.registerEvent(this.app.metadataCache.on("deleted", () => this.scheduleReload()));
       this.registerEvent(this.app.vault.on("rename", (file: TAbstractFile, oldPath: string) => this.onRename(file, oldPath)));
-      // The dossier follows the note open in the editor, when it wants to.
-      // Not explicit: it never opens a leaf and only moves a lens that is
-      // already on the map.
+      // The sidebar's map — when the panel is showing it — follows the note
+      // open in the editor. Not the dossier: the note is its own dossier, and
+      // passive navigation should move a camera, never re-render a reading
+      // surface. Explicit focus — a node click, the palette, a command — is
+      // what turns the lens on.
       this.registerEvent(
         this.app.workspace.on("active-leaf-change", (leaf) => {
           if (!this.settings.followActiveFile) return;
           const file = leaf?.view instanceof MarkdownView ? leaf.view.file : null;
-          if (!file || file.path === this.focusId) return;
-          if (!this.model.snapshot.notes.has(file.path)) return;
-          if (this.focusId === null && !this.app.workspace.getLeavesOfType(VIEW_PANEL).length) return;
-          this.enterFocus(file.path);
+          if (!file || !this.model.snapshot.notes.has(file.path)) return;
+          this.panelView()?.trackPath(file.path);
         }),
       );
+      // The tracker cannot see a theme change itself; retint it here.
+      this.registerEvent(this.app.workspace.on("css-change", () => this.panelView()?.retint()));
       // Escape leaves the lens — unless a dialog owns it.
       this.registerDomEvent(document, "keydown", (event: KeyboardEvent) => {
         if (event.key === "Escape" && this.focusId !== null && !document.querySelector(".modal-container")) {
@@ -213,6 +216,17 @@ export default class ZoomInPlugin extends Plugin {
     await this.app.workspace.revealLeaf(leaf);
   }
 
+  /** The panel, showing the map that tracks the editor. Opening the panel to
+   *  turn the tracker on is the one case where a mode change opens a leaf. */
+  private async toggleSidebarMap(): Promise<void> {
+    if (!this.panelView()) {
+      await this.openPanel();
+      this.panelView()?.setTrackerMode(true);
+      return;
+    }
+    this.panelView()!.setTrackerMode(!this.panelView()!.trackerMode);
+  }
+
   openDomain(id: string): void {
     new DomainModal(this.app, this, id).open();
   }
@@ -271,7 +285,9 @@ export default class ZoomInPlugin extends Plugin {
         view?.renderer?.setFocus(id);
         view?.renderer?.focusOn(id);
       });
-      void this.openPanel();
+      // The dossier is the lens's reading surface; a panel showing the map is
+      // already doing its job, and swapping it out would un-do the tracking.
+      if (!this.panelView()?.trackerMode) void this.openPanel();
     } else if (graph) {
       graph.setFocus(id);
       graph.focusOn(id);

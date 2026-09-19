@@ -14,7 +14,7 @@ export interface ZoomInSettings {
   /** hard caps on the priority slots — a cap you can widen the moment it pinches is decoration, so they sit here, not on the panel */
   domainSlots: number;
   projectSlots: number;
-  /** the panel's dossier follows the note open in the editor (phase 5) */
+  /** the sidebar's map — when the panel shows it — follows the note open in the editor */
   followActiveFile: boolean;
 }
 
@@ -55,8 +55,8 @@ export class ZoomInSettingTab extends PluginSettingTab {
     slot("Project slots", "How many projects can be priorities at once.", "projectSlots");
 
     new Setting(containerEl)
-      .setName("Dossier follows the active note")
-      .setDesc("Opening a note in the editor puts it under the lens and shows its dossier in the panel.")
+      .setName("Follow the note open in the editor")
+      .setDesc("As you move between notes, the sidebar's map — when the panel is showing it — keeps the current note framed. Focusing a note deliberately still opens its dossier.")
       .addToggle((toggle) =>
         toggle.setValue(this.plugin.settings.followActiveFile).onChange(async (value) => {
           this.plugin.settings.followActiveFile = value;

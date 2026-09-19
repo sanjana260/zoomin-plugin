@@ -24,9 +24,12 @@ function harness() {
   );
   model.caps = { domainSlots: 2, projectSlots: 1 };
   model.reload();
+  const saved: Record<string, unknown> = {};
   const local = new LocalState({
-    loadLocalStorage: () => null,
-    saveLocalStorage: () => {},
+    loadLocalStorage: (key: string) => (key in saved ? saved[key] : null),
+    saveLocalStorage: (key: string, value: unknown) => {
+      saved[key] = value;
+    },
   } as never);
   const focus: { id: string | null } = { id: null };
   const plugin = {
@@ -55,7 +58,7 @@ function harness() {
     openSearch: () => {},
   };
   const view = new PanelView({} as never, plugin as never);
-  return { model, view, plugin: plugin as never, focus };
+  return { model, view, plugin: plugin as never, focus, saved };
 }
 
 let h: ReturnType<typeof harness>;
@@ -167,6 +170,29 @@ describe("the lens learns the dossier's labels", () => {
     expect(eyebrow).toContain("Task");
     expect(eyebrow).toContain("One");
     expect(q(".zoomin-dossier-title").textContent).toBe("Ship");
+  });
+});
+
+describe("the panel's tracker mode", () => {
+  it("swaps the sections for a map frame and back, remembering which", () => {
+    h.view.setTrackerMode(true);
+    expect(h.view.trackerMode).toBe(true);
+    expect(q(".zoomin-tracker").isShown()).toBe(true);
+    expect(q(".zoomin-sections").isShown()).toBe(false);
+    expect(h.saved["zoomin.tracker"]).toBe(true);
+
+    h.view.setTrackerMode(false);
+    expect(h.view.trackerMode).toBe(false);
+    expect(q(".zoomin-tracker").isShown()).toBe(false);
+    expect(q(".zoomin-sections").isShown()).toBe(true);
+    expect(h.saved["zoomin.tracker"]).toBe(false);
+  });
+
+  it("tracks the editor quietly when no canvas can exist here", () => {
+    h.view.setTrackerMode(true);
+    // jsdom has no 2d canvas, so the tracker has no renderer; following the
+    // editor must still be a no-op, not a crash.
+    expect(() => h.view.trackPath("Work.md")).not.toThrow();
   });
 });
 

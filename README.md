@@ -17,8 +17,10 @@ Three views, arrangeable like any other:
 - **Panel** — priorities, domains, projects; and, while a note is under the
   lens, that note's dossier: status, parent, domain, datatype, deadline,
   project-ness — editable, so you rarely leave the map to answer "what is
-  this, and what is it wired to". The dossier can follow the note open in the
-  editor (a setting, on by default).
+  this, and what is it wired to". The dossier appears when you focus a note
+  deliberately. The panel can also become the map itself — framed on the note
+  you're reading and following it as you surf (a setting, on by default), so
+  your place in the vault moves with you.
 
 A task is a note filed `categories: Task`. Datatypes give a category a shape on
 the map. Domains are groupings you name — they are not notes and the vault

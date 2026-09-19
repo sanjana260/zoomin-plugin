@@ -33,6 +33,8 @@ Three views, arrangeable like any Obsidian pane:
   priority domains' lists, and a deadline feed tiered red / yellow / grey.
 - **Panel** (right sidebar) — your domains and projects; and, while a note is
   under the lens, that note's **dossier** — its fields, editable in place.
+  The panel can also become the map itself, kept framed on the note you're
+  reading, so your place in the vault moves as you surf.
 
 The plugin reads your whole vault and writes almost nothing to it. That
 division — *the vault holds the notes, the plugin holds your attention
