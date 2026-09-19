@@ -413,6 +413,9 @@ export class GraphRenderer {
   // seconds after the sidebar is usable — long enough to steal a view the
   // user chose on purpose.
   private _userMoved = false;
+  /** A focusOn deferred because the host measured 0x0 (a hidden leaf);
+   *  flushed by resize() once there are pixels to compute a zoom from. */
+  private _pendingFocus: string | null = null;
   private _frame = 0;
   private _centroids: ({ x: number; y: number } | null)[] = [];
   private _centroidsStale = true;
@@ -973,7 +976,16 @@ export class GraphRenderer {
    */
   resize(): void {
     const w = this.el.clientWidth, h = this.el.clientHeight;
-    if (w > 0 && h > 0) this.graph.width(w).height(h);
+    if (w > 0 && h > 0) {
+      this.graph.width(w).height(h);
+      // A focus deferred for lack of pixels lands now that there are some —
+      // this is the moment a hidden leaf is shown again.
+      if (this._pendingFocus !== null) {
+        const id = this._pendingFocus;
+        this._pendingFocus = null;
+        this.focusOn(id);
+      }
+    }
   }
 
   /**
@@ -1036,6 +1048,7 @@ export class GraphRenderer {
     this.focusSet = {};
     this.focusLinks = {};
     if (id === null || !this.byId[id]) {
+      this._pendingFocus = null;
       this._centroidsStale = true;
       return;
     }
@@ -1069,9 +1082,17 @@ export class GraphRenderer {
    * subject in the middle, capped so a lone note is not a wall of pixels.
    */
   focusOn(id: string): void {
-    this._userMoved = true;
     const subject = this.byId[id];
     if (!subject || typeof subject.x !== "number") return;
+    // A leaf in a background tab measures 0x0, and a zoom computed from that
+    // is the camera flung to near-zero — the map "loses its position" while
+    // you work in the editor. Defer until resize() measures real pixels.
+    const w = this.el.clientWidth, h = this.el.clientHeight;
+    if (w <= 0 || h <= 0) {
+      this._pendingFocus = id;
+      return;
+    }
+    this._userMoved = true;
     // The box is measured as half-extents from the subject, not as the
     // neighbourhood's own bounds: the subject belongs in the middle of the
     // screen, and a box symmetric about it is the one that keeps the
@@ -1087,7 +1108,6 @@ export class GraphRenderer {
       ey = Math.max(ey, Math.abs(n.y - subject.y));
     }
     if (!any) { this.centerOnNode(id); return; }
-    const w = this.el.clientWidth || 1, h = this.el.clientHeight || 1;
     // A zero extent on an axis (every neighbour dead level with the subject)
     // divides to Infinity, and the ceiling takes it from there.
     let k = Math.min(Math.max(w - 2 * FOCUS_FIT_PAD, 1) / (2 * ex), Math.max(h - 2 * FOCUS_FIT_PAD, 1) / (2 * ey));

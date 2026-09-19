@@ -170,9 +170,11 @@ export class GraphView extends ItemView {
     this.unsubscribe = this.plugin.model.onChange((structural) => this.refresh(structural));
     this.refresh(true);
     // The lens may already be on before this leaf existed (the active-file
-    // follower never opens leaves); catching up costs one repaint.
+    // follower never opens leaves); catching up costs one repaint — and means
+    // landing on the note, the same camera a click on its node would give.
     if (this.plugin.focusId !== null) {
       this.renderer.setFocus(this.plugin.focusId);
+      this.renderer.focusOn(this.plugin.focusId);
     }
   }
 

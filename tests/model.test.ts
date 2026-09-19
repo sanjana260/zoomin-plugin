@@ -364,6 +364,16 @@ describe("the dossier's note view", () => {
     expect(m.note("Nope.md")).toBeNull();
   });
 
+  it("lists a note's direct children — the Parent relation, not the subtree", () => {
+    const { m } = noteModel();
+    expect(m.childrenOf("Work.md")).toEqual(["Prepay.md"]);
+    expect(m.childrenOf("Prepay.md")).toEqual(["Aetna.md"]);
+    // Work's descendants include Aetna two steps down; it is Prepay's child,
+    // not Work's.
+    expect(m.childrenOf("Chess.md")).toEqual([]);
+    expect(m.childrenOf("Nowhere.md")).toEqual([]);
+  });
+
   it("names the source that settled project-ness, and what the automatics would say", () => {
     const { m } = noteModel();
     // Children: Work is offered, nothing declared.

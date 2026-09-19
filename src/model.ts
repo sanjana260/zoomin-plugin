@@ -582,6 +582,20 @@ export class ZoomInModel {
   }
 
   /**
+   * The notes filed directly under this one, by title — the `Parent:` relation
+   * only, which is a different question from the mixed link lists the dossier
+   * answers beside it. Descendants two steps down are not children.
+   */
+  childrenOf(path: string): string[] {
+    const out: string[] = [];
+    for (const [child, parent] of this.hierarchy.parentOf) if (parent === path) out.push(child);
+    return out.sort((a, b) => {
+      const ta = this.snapshot.notes.get(a)?.title ?? "", tb = this.snapshot.notes.get(b)?.title ?? "";
+      return ta.localeCompare(tb, undefined, { sensitivity: "base" });
+    });
+  }
+
+  /**
    * A node's immediate neighbourhood, split by direction, from the edges —
    * so the dossier works with the map leaf closed.
    */

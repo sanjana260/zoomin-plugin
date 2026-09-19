@@ -513,6 +513,7 @@ class DossierRenderer {
     desc: HTMLElement;
     open: HTMLButtonElement;
     fields: HTMLElement;
+    kids: HTMLElement;
     out: HTMLElement;
     in: HTMLElement;
     count: HTMLElement;
@@ -658,17 +659,21 @@ class DossierRenderer {
 
     // Links, both ways. A hierarchy edge is named for what it means from
     // here: the note this one hangs off, or a note that hangs off this one.
+    // The children come first, as their own question — "what is filed under
+    // this" — before the raw neighbourhood; the lists below stay the full
+    // link set the map draws, so the count and the sections can't disagree.
     const links = model.neighbours(id);
     const sort = (a: { path: string; kind: number }, b: { path: string; kind: number }) => {
       const la = model.nodeInfo(a.path), lb = model.nodeInfo(b.path);
       return b.kind - a.kind || (la && lb ? la.label.localeCompare(lb.label, undefined, { sensitivity: "base" }) : 0);
     };
+    this.fill(d.kids, model.childrenOf(id).map((path) => ({ path, kind: 1 })), null);
     this.fill(d.out, links.out.sort(sort), "parent");
     this.fill(d.in, links.in.sort(sort), "child");
     d.count.setText(String(links.out.length + links.in.length) || "");
   }
 
-  private fill(list: HTMLElement, entries: { path: string; kind: number }[], hierarchyWord: string): void {
+  private fill(list: HTMLElement, entries: { path: string; kind: number }[], hierarchyWord: string | null): void {
     const model = this.panel.plugin.model;
     list.textContent = "";
     for (const entry of entries) {
@@ -679,7 +684,10 @@ class DossierRenderer {
         row(other.label, {
           dotIcon: shapeDot(shape, other.hue),
           title: entry.path,
-          tag: entry.kind === 1 ? { text: hierarchyWord } : other.kind !== 0 ? { text: "unwritten" } : null,
+          // A word per hierarchy edge ("parent"/"child") only where the
+          // section title does not already say it: every row of the direct
+          // children list is a child by definition.
+          tag: entry.kind === 1 && hierarchyWord ? { text: hierarchyWord } : other.kind !== 0 ? { text: "unwritten" } : null,
           onLabelClick: () => this.panel.plugin.enterFocus(entry.path),
         }),
       );
@@ -717,10 +725,12 @@ class DossierRenderer {
     const fields = d.createEl("dl", { cls: "zoomin-dossier-fields" });
     const links = d.createEl("section", { cls: "zoomin-dossier-links" });
     const count = links.createEl("h3", { text: "Links " }).createSpan({ cls: "zoomin-slot-summary" });
+    links.createEl("h4", { cls: "zoomin-group-label", text: "Direct children" });
+    const kids = links.createEl("ul", { cls: "zoomin-list" });
     links.createEl("h4", { cls: "zoomin-group-label", text: "Points to" });
     const out = links.createEl("ul", { cls: "zoomin-list" });
     links.createEl("h4", { cls: "zoomin-group-label", text: "Pointed at by" });
     const inn = links.createEl("ul", { cls: "zoomin-list" });
-    this.dossierEl = { root: d, eyebrow, title, desc, open, fields, out, in: inn, count };
+    this.dossierEl = { root: d, eyebrow, title, desc, open, fields, kids, out, in: inn, count };
   }
 }

@@ -170,4 +170,25 @@ describe("the lens learns the dossier's labels", () => {
   });
 });
 
+describe("the dossier's direct children", () => {
+  it("lists the notes filed under the note, ahead of the link lists", () => {
+    h.focus.id = "Work.md";
+    h.view.render();
+    const labels = qa(".zoomin-dossier-links .zoomin-group-label").map((el) => el.textContent);
+    expect(labels).toEqual(["Direct children", "Points to", "Pointed at by"]);
+    const kids = qa(".zoomin-dossier-links ul")[0];
+    expect(kids.textContent).toContain("Prepay");
+    expect(kids.textContent).toContain("Ship");
+    // The section title already says what every row is; the rows carry no tag.
+    expect(qa(".zoomin-dossier-links ul")[0].textContent).not.toContain("child");
+  });
+
+  it("says nothing for a note nothing is filed under", () => {
+    h.focus.id = "Chess.md";
+    h.view.render();
+    const kids = qa(".zoomin-dossier-links ul")[0];
+    expect(kids.textContent).toContain("Nothing.");
+  });
+});
+
 void labelFor;
