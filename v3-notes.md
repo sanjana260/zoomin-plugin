@@ -278,6 +278,24 @@ it works in either layout. The flow going forward: changes land in the
 monorepo's `plugin/`; publish with `git subtree push --prefix plugin <url>
 main`.
 
+### The follower lands the camera, and the dossier names its children (`d7a047b`)
+Two from living with the map and the editor open together. Navigating the
+editor — a link, or the search panel — flung the map to near-zero zoom
+whenever the map leaf sat in a background tab: the active-file follower calls
+`focusOn` on every `active-leaf-change`, and `focusOn` computed its zoom from
+the host's `clientWidth`, which is 0 in a hidden leaf. The `|| 1` fallback
+turned "no pixels" into "one pixel", and the neighbourhood's extent divided by
+it parked the camera at k ≈ 0.002 — the graph "zooms way out and loses its
+position". `focusOn` now refuses to compute from an unmeasured host, remembers
+the subject, and `resize()` flushes it once the leaf is shown; `onOpen` also
+catches the camera up, not just the lens highlight, so opening the map with
+the focus already on lands on the note. And the dossier's links section gains
+a **Direct children** list ahead of "Points to" / "Pointed at by" — the
+`Parent:` relation by name through the new `model.childrenOf`, direct only (a
+grandchild is not a child). The two raw lists stay the full link set the map
+draws, so the "Links N" count and the sections cannot disagree; children rows
+carry no tag, because the section title already says what every row is.
+
 ---
 
 ## Implementation takeaways
@@ -330,6 +348,12 @@ again on `css-change`; fall back to the system stack before that.
 returns a generic `ForceFn` and needs a cast to reach `.distance()` /
 `.strength()`. Custom forces are plain functions with an `initialize`
 property, as before.
+
+**A hidden Obsidian leaf measures 0×0 — and camera math that divides by it
+still runs.** The `|| 1` guard against divide-by-zero converted "no pixels"
+into "one pixel" and produced an absolute zoom of nothing. Where a computation
+needs the viewport, refuse to compute without it and let the resize handler
+land the deferred result.
 
 **Node was already on the machine by the time the scaffold started — under
 `/opt/homebrew/bin`, which the harness's first shell did not have on `PATH`.**
