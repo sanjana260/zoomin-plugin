@@ -296,6 +296,15 @@ grandchild is not a child). The two raw lists stay the full link set the map
 draws, so the "Links N" count and the sections cannot disagree; children rows
 carry no tag, because the section title already says what every row is.
 
+### The dossier's name breathes, and the census line goes (`b47a320`)
+Polish from use. The dossier's eyebrow sat 4px above the 30px condensed name
+at line-height 1.05 with the ledger 10px below — the top of the panel read as
+one cramped block; now 6px / 1.15 / 14px. And the census line ("370 notes ·
+380 links · 43 unwritten") is gone from both places it appeared — the map's
+bottom-left corner and the panel head. It restated what the map already
+showed, was read once if at all, and with it go `snapshotStats`, the payload's
+`stats` field and three CSS rules — nothing else read any of them.
+
 ---
 
 ## Implementation takeaways
