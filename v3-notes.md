@@ -305,6 +305,19 @@ bottom-left corner and the panel head. It restated what the map already
 showed, was read once if at all, and with it go `snapshotStats`, the payload's
 `stats` field and three CSS rules — nothing else read any of them.
 
+### The sidebar becomes the map: a tracker that follows the editor (`973adc0`)
+The panel's third mode: the map itself, living in the sidebar — its own
+`GraphRenderer` over the same payload, re-framed on the note open in the
+editor every time it changes (decision 43). Head button in, "Toggle the map
+in the sidebar" to swap from anywhere, the mode remembered per device like a
+fold. The tracker saves no positions, keeps no hover card, shares no filter,
+and hands a node click to the big map rather than the editor. With it, the
+dossier stops following passive navigation: the note is its own dossier, and
+the follower now means "follow the note open in the editor", full stop. The
+construction is guarded by a canvas probe, because the environment this
+repository tests in has no 2d context and a mode that cannot build its
+renderer must still be a mode.
+
 ---
 
 ## Implementation takeaways
@@ -363,6 +376,13 @@ still runs.** The `|| 1` guard against divide-by-zero converted "no pixels"
 into "one pixel" and produced an absolute zoom of nothing. Where a computation
 needs the viewport, refuse to compute without it and let the resize handler
 land the deferred result.
+
+**jsdom has no 2d canvas: probe before handing a host to a canvas library.**
+`document.createElement("canvas").getContext("2d")` logs a "Not implemented"
+warning and returns null — the null is the signal. A second renderer born in
+tests would either throw at construction or loop on a dead context; the
+capability check lets a view carry canvas machinery into environments that
+cannot draw and still be a working mode.
 
 **Node was already on the machine by the time the scaffold started — under
 `/opt/homebrew/bin`, which the harness's first shell did not have on `PATH`.**
