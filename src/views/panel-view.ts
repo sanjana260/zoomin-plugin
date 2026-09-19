@@ -38,7 +38,6 @@ export class PanelView extends ItemView {
   sectionsEl: HTMLElement | null = null;
   private dossierRenderer: DossierRenderer | null = null;
   private els: {
-    stats: HTMLElement;
     slotSummary: HTMLElement;
     priorityEmpty: HTMLElement;
     priorityProjectsGroup: HTMLElement;
@@ -110,7 +109,6 @@ export class PanelView extends ItemView {
     line.createEl("h2", { text: "ZoomIn" });
     const datatypes = line.createEl("button", { cls: "zoomin-ghost", text: "Datatypes", attr: { type: "button" } });
     datatypes.onclick = () => this.plugin.openDatatypes();
-    const stats = head.createEl("p", { cls: "zoomin-muted zoomin-small" });
 
     // Priorities.
     const priorities = root.createEl("section", { cls: "zoomin-section" });
@@ -175,7 +173,7 @@ export class PanelView extends ItemView {
     };
 
     this.els = {
-      stats, slotSummary, priorityEmpty, priorityProjectsGroup, priorityProjects, priorityDomainsGroup,
+      slotSummary, priorityEmpty, priorityProjectsGroup, priorityProjects, priorityDomainsGroup,
       priorityDomains, domainName, domainsEmpty, domainList, unassignedBox, unassignedCount, filterNote,
       projectsEmpty, projectList, projectMore,
     };
@@ -266,8 +264,6 @@ export class PanelView extends ItemView {
     this.contentEl.removeClass("zoomin-focusing");
     this.dossierRenderer?.hide();
     this.sectionsEl?.show();
-    const stats = this.plugin.model.payload().stats;
-    this.els.stats.setText(`${stats.notes} notes · ${stats.links} links · ${stats.phantoms} unwritten`);
     this.renderPriorities();
     this.renderDomains();
     this.renderProjects();

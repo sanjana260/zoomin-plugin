@@ -139,5 +139,4 @@ export interface GraphPayload {
   links: { source: number[]; target: number[]; kind: number[] };
   domains: { id: string; label: string; hue: number; priority: boolean }[];
   datatypes: { id: string; name: string; shape: string | null; is_project: boolean }[];
-  stats: { notes: number; phantoms: number; links: number };
 }

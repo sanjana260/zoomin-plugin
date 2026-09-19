@@ -182,8 +182,3 @@ export function buildSnapshot(source: CacheSource, excludedDirs: string[] = DEFA
 
   return snapshot;
 }
-
-/** Counts for the stats strip. */
-export function snapshotStats(snapshot: VaultSnapshot): { notes: number; phantoms: number; links: number } {
-  return { notes: snapshot.notes.size, phantoms: snapshot.phantoms.size, links: snapshot.edges.length };
-}

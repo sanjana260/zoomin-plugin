@@ -314,7 +314,6 @@ export function buildPayload(
       priority: priorityDomains.has(domain.id),
     })),
     datatypes: datatypes.map((d) => ({ id: d.id, name: d.name, shape: d.shape, is_project: d.isProject })),
-    stats: { notes: snapshot.notes.size, phantoms: snapshot.phantoms.size, links: snapshot.edges.length },
   };
 }
 

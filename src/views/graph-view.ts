@@ -40,7 +40,6 @@ export function statusLabel(status: number): string {
 export class GraphView extends ItemView {
   renderer: GraphRenderer | null = null;
   private unsubscribe: (() => void) | null = null;
-  private statsEl: HTMLElement | null = null;
   private hidden: Record<string, true> = {};
   private filterCollapsed: Record<string, true> = {};
   private filter: { button: HTMLButtonElement; panel: HTMLElement; sections: HTMLElement; clear: HTMLButtonElement } | null = null;
@@ -147,9 +146,6 @@ export class GraphView extends ItemView {
       this.hideCard(false);
     });
 
-    // The census, so a reader can compare the map with what they expect of the vault.
-    this.statsEl = root.createDiv({ cls: "zoomin-graph-stats" });
-
     this.renderer = new GraphRenderer(graphEl, {
       dark: isDarkTheme(),
       onSelect: (node) => this.plugin.focusNode(node.id),
@@ -184,8 +180,6 @@ export class GraphView extends ItemView {
     const payload = this.plugin.model.payload();
     if (structural) this.renderer.setData(payload);
     else this.renderer.applyFocus(payload);
-    const stats = payload.stats;
-    this.statsEl?.setText(`${stats.notes} notes · ${stats.links} links · ${stats.phantoms} unwritten`);
     if (this.filter?.panel.isShown()) this.renderFilterPanel();
     // A card left showing a node that just changed should say what it now says.
     if (this.card?.id) {
@@ -208,7 +202,6 @@ export class GraphView extends ItemView {
     this.hideCard(true);
     this.renderer?.destroy();
     this.renderer = null;
-    this.statsEl = null;
     this.filter = null;
     this.card = null;
     this.contentEl.empty();
