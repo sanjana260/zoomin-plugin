@@ -179,12 +179,16 @@ describe("the panel's tracker mode", () => {
     expect(h.view.trackerMode).toBe(true);
     expect(q(".zoomin-tracker").isShown()).toBe(true);
     expect(q(".zoomin-sections").isShown()).toBe(false);
+    // The tracker carries its own head; the sections' would stack a second
+    // "ZoomIn" above it.
+    expect(q(".zoomin-panel-head").isShown()).toBe(false);
     expect(h.saved["zoomin.tracker"]).toBe(true);
 
     h.view.setTrackerMode(false);
     expect(h.view.trackerMode).toBe(false);
     expect(q(".zoomin-tracker").isShown()).toBe(false);
     expect(q(".zoomin-sections").isShown()).toBe(true);
+    expect(q(".zoomin-panel-head").isShown()).toBe(true);
     expect(h.saved["zoomin.tracker"]).toBe(false);
   });
 

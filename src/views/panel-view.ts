@@ -43,6 +43,9 @@ export class PanelView extends ItemView {
   private domainOpen: Record<string, true> = {};
   private priorityOpen: Record<string, true> = {};
   sectionsEl: HTMLElement | null = null;
+  /** The sections' head. The tracker carries its own, so this one steps
+   *  aside while the map is up — two "ZoomIn"s was one too many. */
+  private sectionsHead: HTMLElement | null = null;
   private dossierRenderer: DossierRenderer | null = null;
   private tracking = false;
   private trackerRoot: HTMLElement | null = null;
@@ -125,6 +128,7 @@ export class PanelView extends ItemView {
 
   private build(root: HTMLElement): void {
     const head = root.createDiv({ cls: "zoomin-panel-head" });
+    this.sectionsHead = head;
     const line = head.createDiv({ cls: "zoomin-head-line" });
     line.createEl("h2", { text: "ZoomIn" });
     const datatypes = line.createEl("button", { cls: "zoomin-ghost", text: "Datatypes", attr: { type: "button" } });
@@ -292,11 +296,13 @@ export class PanelView extends ItemView {
       return;
     }
     if (this.plugin.focusId !== null) {
+      this.sectionsHead?.show();
       this.dossierRenderer?.render(this.plugin.focusId);
       return;
     }
     this.contentEl.removeClass("zoomin-focusing");
     this.dossierRenderer?.hide();
+    this.sectionsHead?.show();
     this.sectionsEl?.show();
     this.renderPriorities();
     this.renderDomains();
@@ -340,6 +346,7 @@ export class PanelView extends ItemView {
   private renderTracker(structural: boolean): void {
     this.contentEl.removeClass("zoomin-focusing");
     this.dossierRenderer?.hide();
+    this.sectionsHead?.hide();
     this.sectionsEl?.hide();
     this.trackerRoot?.show();
     if (!this.trackerHost) return;
@@ -351,9 +358,9 @@ export class PanelView extends ItemView {
         this.tracker = new GraphRenderer(this.trackerHost, {
           dark: isDarkTheme(),
           // No hover card, no position saves, no background click: the tracker
-          // is a place, not a second dashboard. A node click hands you to the
-          // big map, the way a panel row does.
-          onSelect: (node) => this.plugin.zoomToNote(node.id),
+          // is a place, not a second dashboard. A node click is where you go:
+          // you are already in the editor, so the map is the way you move.
+          onSelect: (node) => this.plugin.openNote(node.id),
         });
         this.tracker.setFilter({});
         this.tracker.setData(this.plugin.model.payload());
@@ -378,6 +385,9 @@ export class PanelView extends ItemView {
   private framePath(path: string, force = false): void {
     if (!this.tracker || (path === this.lastTracked && !force)) return;
     this.lastTracked = path;
+    // The lens treatment: where you are is lit, its neighbourhood with it,
+    // everything else receding — "you are here", said the map's own way.
+    this.tracker.setFocus(path);
     this.tracker.centerOnNode(path);
   }
 

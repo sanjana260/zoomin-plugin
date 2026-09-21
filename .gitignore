@@ -4,3 +4,6 @@ main.js
 data.json
 # the throwaway vault generated next to a standalone checkout
 test-vault/
+
+# Finder noise
+.DS_Store
