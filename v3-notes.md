@@ -318,6 +318,17 @@ construction is guarded by a canvas probe, because the environment this
 repository tests in has no 2d context and a mode that cannot build its
 renderer must still be a mode.
 
+### The tracker navigates: a click opens the note, and the open note is lit (`a6bfe5b`)
+Three from its first real stretch. The click rule flipped: a node click in
+the sidebar's map opens that note in the editor's current tab — from the
+sidebar the map is how you move, and the big map hop was one past the
+destination (decision 44, amending 43's first cut). The open note now wears
+the lens too — `setFocus` rides with `centerOnNode` — so "where am I" is
+lit rather than merely centred. And the double "ZoomIn": the sections' head
+was a root-level sibling that no earlier mode had needed to hide, so tracker
+mode stacked its own head under it; the head now steps aside with the
+sections.
+
 ---
 
 ## Implementation takeaways
