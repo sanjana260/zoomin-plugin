@@ -329,6 +329,18 @@ was a root-level sibling that no earlier mode had needed to hide, so tracker
 mode stacked its own head under it; the head now steps aside with the
 sections.
 
+### The tracker yields to the map and dashboard; tasks open their own tab (`5c21738`)
+The tracker's preference and its display split: the toggle is the user's
+standing choice (persisted as before), and `setEditorActive` — driven by
+`active-leaf-change` classifying the surface — decides where that choice
+lives right now (decision 45). A note brings the tracker; the map or the
+tasks dashboard bring the sections; anything else changes nothing, because
+clicking the tracker itself must not un-tracker it. `openPanel` syncs the
+surface on the way in, so opening the panel from the map lands on the
+sections. And a clicked task opens in its own tab — a destination, not a
+lens subject — with the tracker returning on arrival, since the new tab is
+a note being read.
+
 ---
 
 ## Implementation takeaways
