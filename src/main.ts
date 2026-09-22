@@ -124,12 +124,23 @@ export default class ZoomInPlugin extends Plugin {
       // passive navigation should move a camera, never re-render a reading
       // surface. Explicit focus — a node click, the palette, a command — is
       // what turns the lens on.
+      //
+      // The tracker is also a reading companion (decision 45): on the map or
+      // the dashboard the sections come back. Anything else — the panel
+      // itself, other sidebars — changes nothing, or clicking the tracker
+      // would un-tracker it.
       this.registerEvent(
         this.app.workspace.on("active-leaf-change", (leaf) => {
-          if (!this.settings.followActiveFile) return;
-          const file = leaf?.view instanceof MarkdownView ? leaf.view.file : null;
-          if (!file || !this.model.snapshot.notes.has(file.path)) return;
-          this.panelView()?.trackPath(file.path);
+          const panel = this.panelView();
+          const viewType = leaf?.view.getViewType();
+          if (leaf?.view instanceof MarkdownView) {
+            panel?.setEditorActive(true);
+            if (!this.settings.followActiveFile) return;
+            const file = leaf.view.file;
+            if (file && this.model.snapshot.notes.has(file.path)) panel?.trackPath(file.path);
+          } else if (viewType === VIEW_GRAPH || viewType === VIEW_TASKS) {
+            panel?.setEditorActive(false);
+          }
         }),
       );
       // The tracker cannot see a theme change itself; retint it here.
@@ -197,12 +208,19 @@ export default class ZoomInPlugin extends Plugin {
     const existing = this.app.workspace.getLeavesOfType(VIEW_PANEL);
     if (existing.length > 0) {
       await this.app.workspace.revealLeaf(existing[0]);
+      this.panelView()?.setEditorActive(this.activeLeafIsNote());
       return;
     }
     const leaf = this.app.workspace.getRightLeaf(false);
     if (!leaf) return;
     await leaf.setViewState({ type: VIEW_PANEL, active: true });
     await this.app.workspace.revealLeaf(leaf);
+    this.panelView()?.setEditorActive(this.activeLeafIsNote());
+  }
+
+  /** Whether the leaf being read is a note — the tracker's home ground. */
+  private activeLeafIsNote(): boolean {
+    return this.app.workspace.getActiveViewOfType(MarkdownView) !== null;
   }
 
   async openTasks(): Promise<void> {
@@ -349,6 +367,14 @@ export default class ZoomInPlugin extends Plugin {
     const file = this.app.vault.getFileByPath(path);
     if (!file) return;
     void this.app.workspace.getLeaf(false).openFile(file);
+  }
+
+  /** Open a note in its own tab, leaving the current one standing — the
+   *  dashboard's way: a task is a destination, and the list is the work. */
+  openNoteInNewTab(path: string): void {
+    const file = this.app.vault.getFileByPath(path);
+    if (!file) return;
+    void this.app.workspace.getLeaf(true).openFile(file);
   }
 
   /** The dossier's parent picker: every written note but the subject. */

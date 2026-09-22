@@ -159,7 +159,9 @@ export class TasksView extends ItemView {
     const label = el("button", "zoomin-task-label", row.label);
     label.type = "button";
     label.title = row.path;
-    label.onclick = () => this.plugin.zoomToNote(row.path);
+    // A task is a destination, not a lens subject: its own tab, the
+    // dashboard left as it stands.
+    label.onclick = () => this.plugin.openNoteInNewTab(row.path);
     item.appendChild(label);
 
     const meta: string[] = [];

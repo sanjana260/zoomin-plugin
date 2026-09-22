@@ -192,6 +192,27 @@ describe("the panel's tracker mode", () => {
     expect(h.saved["zoomin.tracker"]).toBe(false);
   });
 
+  it("yields to the sections while the map or dashboard is up, and returns with the note", () => {
+    h.view.setTrackerMode(true);
+    expect(h.view.trackerMode).toBe(true);
+
+    // On the map or the tasks dashboard the sections have their place back…
+    h.view.setEditorActive(false);
+    expect(h.view.trackerMode).toBe(false);
+    expect(q(".zoomin-sections").isShown()).toBe(true);
+
+    // …and reading a note brings the tracker with you, preference intact.
+    h.view.setEditorActive(true);
+    expect(h.view.trackerMode).toBe(true);
+    expect(h.saved["zoomin.tracker"]).toBe(true);
+
+    // But the surface cannot override the user's off.
+    h.view.setTrackerMode(false);
+    h.view.setEditorActive(true);
+    expect(h.view.trackerMode).toBe(false);
+    expect(h.saved["zoomin.tracker"]).toBe(false);
+  });
+
   it("tracks the editor quietly when no canvas can exist here", () => {
     h.view.setTrackerMode(true);
     // jsdom has no 2d canvas, so the tracker has no renderer; following the

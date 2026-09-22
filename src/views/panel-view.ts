@@ -48,6 +48,10 @@ export class PanelView extends ItemView {
   private sectionsHead: HTMLElement | null = null;
   private dossierRenderer: DossierRenderer | null = null;
   private tracking = false;
+  /** The user's standing choice (persisted): the map in the sidebar while reading. */
+  private preferred = false;
+  /** Whether a note is being read — the tracker's home ground. */
+  private editorActive = true;
   private trackerRoot: HTMLElement | null = null;
   private trackerHost: HTMLElement | null = null;
   private tracker: GraphRenderer | null = null;
@@ -91,7 +95,8 @@ export class PanelView extends ItemView {
     const local = this.plugin.local;
     this.domainOpen = local.idSet(DOMAIN_OPEN_KEY);
     this.priorityOpen = local.idSet(PRIORITY_OPEN_KEY);
-    this.tracking = local.flag(TRACKER_KEY);
+    this.preferred = local.flag(TRACKER_KEY);
+    this.tracking = this.preferred;
 
     const root = this.contentEl;
     root.empty();
@@ -316,11 +321,27 @@ export class PanelView extends ItemView {
     return this.tracking;
   }
 
-  /** Swap the panel between its sections and the map that tracks the editor. */
+  /** The user's toggle: a standing choice to have the map in the sidebar
+   *  while reading. Shown at once, whatever the surface; where it lives from
+   *  here is setEditorActive's to say. */
   setTrackerMode(on: boolean): void {
+    this.preferred = on;
+    this.plugin.local.saveFlag(TRACKER_KEY, on);
+    this.applyTracking(on);
+  }
+
+  /** The plugin reports whether a note is being read. The tracker is a
+   *  reading companion: on the map or the dashboard the sections come back,
+   *  and returning to a note brings the tracker with you. */
+  setEditorActive(active: boolean): void {
+    if (this.editorActive === active) return;
+    this.editorActive = active;
+    this.applyTracking(this.preferred && active);
+  }
+
+  private applyTracking(on: boolean): void {
     if (on === this.tracking) return;
     this.tracking = on;
-    this.plugin.local.saveFlag(TRACKER_KEY, on);
     if (!on) {
       // The tracker's simulation is not worth keeping idle: a fresh one costs
       // nothing and re-seeds from the saved positions.
