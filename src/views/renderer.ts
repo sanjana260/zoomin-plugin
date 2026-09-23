@@ -922,8 +922,17 @@ export class GraphRenderer {
       focus: n.focus[i],
     }));
     this.nodes = nodes;
+    // Hit-testing paints every node's pointer area onto a shadow canvas in
+    // array order and the last painter wins, so this order is the whole
+    // difference on a crowded rim: alphabetical, a hub named "A" painted
+    // before its leaves, and their hover floors (11/scale units each — 22
+    // units at overview zoom against a 29-child hub's drawn 12.8) ate its
+    // disc down to the centre. Small first, large last: a big node's own
+    // area always beats the floors of the nodes around it — and drawing
+    // large on top is where it belongs anyway.
+    this.nodes.sort((a, b) => this.radius(a) - this.radius(b));
     this.byId = {};
-    for (const node of nodes) this.byId[node.id] = node;
+    for (const node of this.nodes) this.byId[node.id] = node;
     this._centroidsStale = true;
 
     const links: RLink[] = payload.links.source.map((s, i) => ({
