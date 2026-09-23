@@ -382,6 +382,11 @@ export class PanelView extends ItemView {
           // is a place, not a second dashboard. A node click is where you go:
           // you are already in the editor, so the map is the way you move.
           onSelect: (node) => this.plugin.openNote(node.id),
+          // A structural change (a parent set, a rename) reheats the layout,
+          // and the note drifts to its new place *after* the reload framed
+          // it — the camera would watch the spot it left. Re-frame when the
+          // engine settles and the node has arrived.
+          onSettled: () => this.trackActive(true),
         });
         this.tracker.setFilter({});
         this.tracker.setData(this.plugin.model.payload());
@@ -417,6 +422,12 @@ export class PanelView extends ItemView {
     rootEl.hide();
     const line = rootEl.createDiv({ cls: "zoomin-head-line zoomin-tracker-head" });
     line.createEl("h2", { text: "ZoomIn" });
+    const recenter = line.createEl("button", {
+      cls: "zoomin-ghost",
+      attr: { type: "button", "aria-label": "Recenter on the current note", title: "Recenter on the current note" },
+    });
+    setIcon(recenter, "locate-fixed");
+    recenter.onclick = () => this.trackActive(true);
     const back = line.createEl("button", {
       cls: "zoomin-ghost",
       attr: { type: "button", "aria-label": "Back to priorities", title: "Back to priorities" },
