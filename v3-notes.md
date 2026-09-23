@@ -351,6 +351,14 @@ its disc (a 29-child hub draws at 12.8 units). The renderer's node order is
 now by radius ascending, which both gives a large node its own area back on
 the hit canvas and draws large-on-top on the visible one (decision 46).
 
+### The tracker re-frames on settle, and a recenter button (`dde3775`)
+Set a parent on a parentless note and the tracker stared at an abyss: the
+structural reload framed the note, but the same reload reheats the layout and
+the note drifted to its new place *after* the camera arrived — `centerAt` was
+handed the address the node was leaving. The tracker re-frames on engine
+settle now, when the node has arrived, and a locate-fixed button in its head
+recenters on demand (decision 47).
+
 ---
 
 ## Implementation takeaways
