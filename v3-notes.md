@@ -341,6 +341,16 @@ sections. And a clicked task opens in its own tab — a destination, not a
 lens subject — with the tracker returning on arrival, since the new tab is
 a note being read.
 
+### Click order: the map paints small first, so a hub owns its own disc (`df19a9d`)
+Clicking a large hub sometimes did nothing, and answered only at its centre
+when it did. force-graph hit-tests by painting each node's pointer area onto
+a shadow canvas **in array order, last painter wins** — and the array was
+alphabetical by path, so a hub named "Agentic" painted before its leaves and
+their hover floors (11 screen px each, ≈22 graph units at overview zoom) ate
+its disc (a 29-child hub draws at 12.8 units). The renderer's node order is
+now by radius ascending, which both gives a large node its own area back on
+the hit canvas and draws large-on-top on the visible one (decision 46).
+
 ---
 
 ## Implementation takeaways
@@ -406,6 +416,13 @@ warning and returns null — the null is the signal. A second renderer born in
 tests would either throw at construction or loop on a dead context; the
 capability check lets a view carry canvas machinery into environments that
 cannot draw and still be a working mode.
+
+**force-graph's hit test is a shadow canvas where the last painter wins.**
+`nodePointerAreaPaint` areas are painted in `graphData.nodes` order onto a
+same-resolution shadow canvas, and the pixel under the pointer decides — so
+node *order* is overlap resolution. Whatever order you hand `setData` is the
+z-order of both the hit canvas and the visible one; choose it deliberately
+(here: radius ascending) instead of inheriting it (was: alphabetical path).
 
 **Node was already on the machine by the time the scaffold started — under
 `/opt/homebrew/bin`, which the harness's first shell did not have on `PATH`.**
