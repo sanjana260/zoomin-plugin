@@ -76,8 +76,8 @@ export class ZoomInSettingTab extends PluginSettingTab {
             }),
         );
 
-    days("Urgent within (days)", "Deadlines overdue or this close are urgent — the feed's red tier. One day by default: today and tomorrow.", "urgentDays");
-    days("Due soon within (days)", "Past the urgent window but this close: the feed's yellow tier. Seven days by default. A red window wider than this one is clamped to it.", "dueSoonDays");
+    days("Urgent within (days)", "Deadlines with less than this many days left are urgent — the feed's red tier. One day by default: today only; tomorrow counts as due soon. Overdue is always urgent.", "urgentDays");
+    days("Due soon within (days)", "Past the urgent window, deadlines with less than this many days left are due soon — the feed's yellow tier. Seven by default: tomorrow through six days out.", "dueSoonDays");
 
     // The panel's head now says "Settings"; the datatypes dialog keeps its own
     // way in, here and as a command.

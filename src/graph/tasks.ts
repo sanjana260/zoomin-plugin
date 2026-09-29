@@ -48,11 +48,13 @@ export function isTask(categories: string[]): boolean {
 }
 
 export function tier(days: number, urgency: Urgency = DEFAULT_URGENCY): string {
-  // A red window wider than the yellow one would invert the tiers; clamp
-  // rather than trust the caller.
+  // A deadline N days out is inside a window when N is *under* it, not equal:
+  // "urgent within 1 day" means today — tomorrow still has its day of margin.
+  // Overdue is under every window, so it is always red. A red window wider
+  // than the yellow one would invert the tiers; clamp rather than trust.
   const yellow = Math.max(urgency.yellow, urgency.red);
-  if (days <= urgency.red) return "red";
-  if (days <= yellow) return "yellow";
+  if (days < urgency.red) return "red";
+  if (days < yellow) return "yellow";
   return "grey";
 }
 

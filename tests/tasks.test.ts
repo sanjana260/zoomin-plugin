@@ -84,42 +84,46 @@ describe("the three lists", () => {
   });
 
   it("leaves near deadlines to the feed by the feed's own boundary", () => {
-    expect(nearDeadline(day(7), TODAY)).toBe(true); // +7: the boundary is included
-    expect(nearDeadline(day(8), TODAY)).toBe(false); // +8: kept by the domain list
+    expect(nearDeadline(day(6), TODAY)).toBe(true); // +6: inside the yellow window
+    expect(nearDeadline(day(7), TODAY)).toBe(false); // +7: kept by the domain list
     expect(nearDeadline(null, TODAY)).toBe(false);
   });
 
   it("computes days in the viewer's clock", () => {
     expect(daysUntil(day(3), TODAY)).toBe(3);
     expect(daysUntil(day(-1), TODAY)).toBe(-1);
+    // A deadline N days out is inside a window when N is under it, not equal:
+    // urgent within 1 day means today; tomorrow has its day of margin.
     expect(tier(-1)).toBe("red");
     expect(tier(0)).toBe("red");
-    expect(tier(7)).toBe("yellow");
-    expect(tier(8)).toBe("grey");
+    expect(tier(1)).toBe("yellow");
+    expect(tier(6)).toBe("yellow");
+    expect(tier(7)).toBe("grey");
   });
 
   it("recolors the tiers from the configured urgency windows", () => {
-    expect(tier(2, { red: 2, yellow: 7 })).toBe("red");
-    expect(tier(3, { red: 2, yellow: 3 })).toBe("yellow");
-    expect(tier(4, { red: 2, yellow: 3 })).toBe("grey");
+    expect(tier(1, { red: 2, yellow: 7 })).toBe("red");
+    expect(tier(2, { red: 2, yellow: 7 })).toBe("yellow");
+    expect(tier(2, { red: 2, yellow: 3 })).toBe("yellow");
+    expect(tier(3, { red: 2, yellow: 3 })).toBe("grey");
     // Overdue is always red, whatever the windows say.
     expect(tier(-5, { red: 0, yellow: 0 })).toBe("red");
     // A red window wider than the yellow one cannot invert the tiers: the
     // yellow window is clamped up to the red one, so nothing is "yellow only".
-    expect(tier(5, { red: 5, yellow: 2 })).toBe("red");
-    expect(tier(6, { red: 5, yellow: 2 })).toBe("grey");
+    expect(tier(4, { red: 5, yellow: 2 })).toBe("red");
+    expect(tier(5, { red: 5, yellow: 2 })).toBe("grey");
   });
 
   it("moves the near-deadline boundary with the yellow window", () => {
-    expect(nearDeadline(day(14), TODAY, { red: 1, yellow: 14 })).toBe(true);
-    expect(nearDeadline(day(15), TODAY, { red: 1, yellow: 14 })).toBe(false);
+    expect(nearDeadline(day(13), TODAY, { red: 1, yellow: 14 })).toBe(true);
+    expect(nearDeadline(day(14), TODAY, { red: 1, yellow: 14 })).toBe(false);
   });
 
   it("carries the model's urgency into the dashboard's rows", () => {
     // "Loose" is due in 9 days — grey at the default windows, red once the
-    // urgent window is widened.
+    // urgent window is widened past it.
     expect(model.tasks(TODAY).deadlines.find((r) => r.label === "Loose")!.tier).toBe("grey");
-    model.urgency = { red: 9, yellow: 14 };
+    model.urgency = { red: 10, yellow: 14 };
     expect(model.tasks(TODAY).deadlines.find((r) => r.label === "Loose")!.tier).toBe("red");
   });
 });

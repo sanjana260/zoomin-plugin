@@ -292,9 +292,13 @@ deadline: 2026-10-01
 
 | Tier | When | Meaning |
 | --- | --- | --- |
-| **Red** | overdue, or within the urgent window (1 day out by default) | shouting |
-| **Yellow** | past the urgent window but within the due-soon window (7 days by default) | asking |
+| **Red** | overdue, or due today (the urgent window is 1 day by default) | shouting |
+| **Yellow** | past the urgent window but due inside the due-soon one — tomorrow through six days out at the defaults | asking |
 | **Grey** | further out | present, not asking |
+
+A deadline counts as inside a window when it is due in *fewer* than that
+many days: with the urgent window at 1, today is urgent and tomorrow is
+merely due soon. Overdue is inside every window.
 
 - **`Explored` tasks leave the feed** — a finished task's deadline is moot.
   Every other status stays, *including no status and `Unexplored`*: a deadline
