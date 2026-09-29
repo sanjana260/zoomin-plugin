@@ -286,12 +286,14 @@ deadline: 2026-10-01
 - One ISO date, `YYYY-MM-DD`. Anything else — words, empty values — is no
   deadline. Any note *can* carry one, but the dashboard's deadline feed only
   lists **tasks** (`categories: Task`).
-- The feed sorts by date, most urgent first, and tiers:
+- The feed sorts by date, most urgent first, and tiers. Both windows are
+  settings (*Settings → Urgent within / Due soon within*, one day and seven
+  by default):
 
 | Tier | When | Meaning |
 | --- | --- | --- |
-| **Red** | overdue, today, or tomorrow | shouting |
-| **Yellow** | within a week | asking |
+| **Red** | overdue, or within the urgent window (1 day out by default) | shouting |
+| **Yellow** | past the urgent window but within the due-soon window (7 days by default) | asking |
 | **Grey** | further out | present, not asking |
 
 - **`Explored` tasks leave the feed** — a finished task's deadline is moot.

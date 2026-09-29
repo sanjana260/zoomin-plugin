@@ -17,11 +17,17 @@ import { Assignments, Datatype, Domain, Priorities, VaultSnapshot, fold } from "
 
 const TASK_CATEGORY = "task";
 
-// Deadline tiers, in days from today. A day out or overdue is red and goes to
-// the top; a week out is yellow; beyond that grey, present but not asking for
-// anything yet.
-export const RED_WITHIN = 1;
-export const YELLOW_WITHIN = 7;
+/**
+ * The urgency windows, in days from today, both configurable in settings.
+ * Red is the urgent window — overdue included; yellow is due-soon; grey is
+ * present but not asking for anything yet.
+ */
+export interface Urgency {
+  red: number;
+  yellow: number;
+}
+
+export const DEFAULT_URGENCY: Urgency = { red: 1, yellow: 7 };
 
 export interface TaskRow {
   path: string;
@@ -41,9 +47,12 @@ export function isTask(categories: string[]): boolean {
   return categories.some((name) => fold(name) === TASK_CATEGORY);
 }
 
-export function tier(days: number): string {
-  if (days <= RED_WITHIN) return "red";
-  if (days <= YELLOW_WITHIN) return "yellow";
+export function tier(days: number, urgency: Urgency = DEFAULT_URGENCY): string {
+  // A red window wider than the yellow one would invert the tiers; clamp
+  // rather than trust the caller.
+  const yellow = Math.max(urgency.yellow, urgency.red);
+  if (days <= urgency.red) return "red";
+  if (days <= yellow) return "yellow";
   return "grey";
 }
 
@@ -63,10 +72,10 @@ export function daysUntil(deadline: string, today: Date): number {
  * True when the note's deadline would light up (red or yellow) in the feed.
  * Defined through `tier()` rather than a comparison of its own so the
  * deadline feed and anything that defers to it can never disagree about where
- * "near" ends: it is YELLOW_WITHIN, overdue included.
+ * "near" ends: it is the configured yellow window, overdue included.
  */
-export function nearDeadline(deadline: string | null, today: Date): boolean {
-  return deadline !== null && tier(daysUntil(deadline, today)) !== "grey";
+export function nearDeadline(deadline: string | null, today: Date, urgency: Urgency = DEFAULT_URGENCY): boolean {
+  return deadline !== null && tier(daysUntil(deadline, today), urgency) !== "grey";
 }
 
 export class RowBuilder {
@@ -82,6 +91,7 @@ export class RowBuilder {
     domains: Domain[],
     private readonly assignments: Assignments,
     private readonly datatypes: Datatype[],
+    private readonly urgency: Urgency = DEFAULT_URGENCY,
   ) {
     domains.forEach((d, i) => this.domainIndex.set(d.id, i));
     this.datatypeIndex = shapeIndex(datatypes);
@@ -109,7 +119,7 @@ export class RowBuilder {
     let days: number | null = null, tierName: string | null = null;
     if (note.deadline !== null && today !== null) {
       days = daysUntil(note.deadline, today);
-      tierName = tier(days);
+      tierName = tier(days, this.urgency);
     }
     return {
       path,
@@ -159,6 +169,7 @@ export function domainTaskPaths(
   members: Map<string, Member[]>,
   priorities: Priorities,
   today: Date,
+  urgency: Urgency = DEFAULT_URGENCY,
 ): string[] {
   const seen = new Set<string>();
   const out: string[] = [];
@@ -167,7 +178,7 @@ export function domainTaskPaths(
       for (const path of exploringTasksUnder(snapshot, hierarchy, member.path)) {
         if (seen.has(path)) continue;
         const note = snapshot.notes.get(path)!;
-        if (nearDeadline(note.deadline, today)) continue;
+        if (nearDeadline(note.deadline, today, urgency)) continue;
         seen.add(path);
         out.push(path);
       }

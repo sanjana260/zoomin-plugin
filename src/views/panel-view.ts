@@ -136,8 +136,8 @@ export class PanelView extends ItemView {
     this.sectionsHead = head;
     const line = head.createDiv({ cls: "zoomin-head-line" });
     line.createEl("h2", { text: "ZoomIn" });
-    const datatypes = line.createEl("button", { cls: "zoomin-ghost", text: "Datatypes", attr: { type: "button" } });
-    datatypes.onclick = () => this.plugin.openDatatypes();
+    const settings = line.createEl("button", { cls: "zoomin-ghost", text: "Settings", attr: { type: "button" } });
+    settings.onclick = () => this.plugin.openSettings();
     const map = line.createEl("button", {
       cls: "zoomin-ghost",
       attr: { type: "button", "aria-label": "Show the map here", title: "Show the map here" },

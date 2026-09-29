@@ -17,8 +17,9 @@
 import { DOMAIN_HUES, Member, buildPayload, domainMembers, effectiveDomain, shapeIndex, shapeOf } from "./graph/build";
 import { EXCLUDED_TITLES, Hierarchy, TreeNode, buildHierarchy } from "./graph/hierarchy";
 import { RowBuilder, applyOrder, deadlinePaths, domainTaskPaths, exploringTasksUnder, stableShuffle, todayIso } from "./graph/tasks";
-import type { TaskRow } from "./graph/tasks";
-export type { TaskRow };
+import type { TaskRow, Urgency } from "./graph/tasks";
+import { DEFAULT_URGENCY } from "./graph/tasks";
+export type { TaskRow, Urgency };
 import { Store } from "./state/store";
 import { Datatype, GraphPayload, LinkKind, Positions, STATUSES, Status, VaultSnapshot, fold } from "./types";
 import { categoryNames } from "./vault/categories";
@@ -101,6 +102,8 @@ export class ZoomInModel {
   /** Persisted layout, owned by the plugin's per-device state. */
   positions: Positions = new Map();
   caps: SlotCaps = { domainSlots: 3, projectSlots: 1 };
+  /** The deadline feed's urgency windows, in days — a setting. */
+  urgency: Urgency = { ...DEFAULT_URGENCY };
 
   private listeners = new Set<ChangeListener>();
   private structureKey = "";
@@ -473,7 +476,7 @@ export class ZoomInModel {
     const priorities = this.store.priorities();
     const assignments = this.store.assignments();
     const domains = this.store.domains();
-    const builder = new RowBuilder(this.snapshot, this.hierarchy, domains, assignments, this.store.datatypes());
+    const builder = new RowBuilder(this.snapshot, this.hierarchy, domains, assignments, this.store.datatypes(), this.urgency);
     const byId = new Map(domains.map((d) => [d.id, d]));
 
     const focus: FocusBox[] = [];
@@ -497,7 +500,7 @@ export class ZoomInModel {
     }
 
     const members = domainMembers(this.hierarchy, assignments);
-    const unordered = domainTaskPaths(this.snapshot, this.hierarchy, members, priorities, today);
+    const unordered = domainTaskPaths(this.snapshot, this.hierarchy, members, priorities, today, this.urgency);
     const domainRows = applyOrder(stableShuffle(unordered), this.store.taskOrder("domains"));
 
     return {

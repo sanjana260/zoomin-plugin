@@ -69,7 +69,7 @@ export default class ZoomInPlugin extends Plugin {
     }
     this.model = new ZoomInModel(appSource(this.app), store, appWriter(this.app));
     this.model.positions = this.local.positions();
-    this.applyCaps();
+    this.applySettings();
 
     this.registerView(VIEW_GRAPH, (leaf: WorkspaceLeaf) => new GraphView(leaf, this));
     this.registerView(VIEW_PANEL, (leaf: WorkspaceLeaf) => new PanelView(leaf, this));
@@ -166,13 +166,19 @@ export default class ZoomInPlugin extends Plugin {
   }
 
   async saveSettings(): Promise<void> {
-    this.applyCaps();
+    this.applySettings();
     await this.persist();
     this.model.rebuild(false);
   }
 
-  private applyCaps(): void {
+  private applySettings(): void {
     this.model.caps = { domainSlots: this.settings.domainSlots, projectSlots: this.settings.projectSlots };
+    // The red window can never outstretch the yellow one — the tiers would
+    // invert — so the effective windows are clamped here rather than
+    // surprise-writing one field when the other changes.
+    const red = Math.max(0, Math.floor(this.settings.urgentDays) || 0);
+    const yellow = Math.max(0, Math.floor(this.settings.dueSoonDays) || 0);
+    this.model.urgency = { red, yellow: Math.max(red, yellow) };
   }
 
   /** The layout settled: remembered per device, and kept in the model so a
@@ -251,6 +257,15 @@ export default class ZoomInPlugin extends Plugin {
 
   openDatatypes(): void {
     new DatatypesModal(this.app, this).open();
+  }
+
+  /** Obsidian's settings, open on this plugin's tab — the panel's Settings
+   *  button lands here, where the slots and the urgency windows live. */
+  openSettings(): void {
+    const setting = (this.app as unknown as { setting?: { open(): void; openTabById(id: string): void } }).setting;
+    if (!setting) return;
+    setting.open();
+    setting.openTabById(this.manifest.id);
   }
 
   /** A panel row was clicked: show the map and go there. A click that zooms

@@ -97,6 +97,31 @@ describe("the three lists", () => {
     expect(tier(7)).toBe("yellow");
     expect(tier(8)).toBe("grey");
   });
+
+  it("recolors the tiers from the configured urgency windows", () => {
+    expect(tier(2, { red: 2, yellow: 7 })).toBe("red");
+    expect(tier(3, { red: 2, yellow: 3 })).toBe("yellow");
+    expect(tier(4, { red: 2, yellow: 3 })).toBe("grey");
+    // Overdue is always red, whatever the windows say.
+    expect(tier(-5, { red: 0, yellow: 0 })).toBe("red");
+    // A red window wider than the yellow one cannot invert the tiers: the
+    // yellow window is clamped up to the red one, so nothing is "yellow only".
+    expect(tier(5, { red: 5, yellow: 2 })).toBe("red");
+    expect(tier(6, { red: 5, yellow: 2 })).toBe("grey");
+  });
+
+  it("moves the near-deadline boundary with the yellow window", () => {
+    expect(nearDeadline(day(14), TODAY, { red: 1, yellow: 14 })).toBe(true);
+    expect(nearDeadline(day(15), TODAY, { red: 1, yellow: 14 })).toBe(false);
+  });
+
+  it("carries the model's urgency into the dashboard's rows", () => {
+    // "Loose" is due in 9 days — grey at the default windows, red once the
+    // urgent window is widened.
+    expect(model.tasks(TODAY).deadlines.find((r) => r.label === "Loose")!.tier).toBe("grey");
+    model.urgency = { red: 9, yellow: 14 };
+    expect(model.tasks(TODAY).deadlines.find((r) => r.label === "Loose")!.tier).toBe("red");
+  });
 });
 
 describe("order", () => {
