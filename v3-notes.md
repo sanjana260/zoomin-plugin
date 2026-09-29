@@ -369,6 +369,12 @@ through `tier()`, so the feed and the lists cannot disagree about "soon".
 The panel's head button becomes **Settings**, opening Obsidian's own tab on
 the plugin's page; the datatypes dialog keeps a row there plus its command.
 
+### Urgent 1 means today (`693bddb`)
+The windows read inclusively — urgent within 1 coloured today *and* tomorrow
+— and tomorrow is not today's emergency. A deadline N days out is inside a
+window when N is under it, not equal (decision 49): urgent 1 = today only,
+due-soon 7 = tomorrow through six days out, overdue always red.
+
 ---
 
 ## Implementation takeaways
