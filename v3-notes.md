@@ -359,6 +359,16 @@ handed the address the node was leaving. The tracker re-frames on engine
 settle now, when the node has arrived, and a locate-fixed button in its head
 recenters on demand (decision 47).
 
+### Urgency becomes a setting (`1fa1831`)
+The feed's red and yellow windows leave the constants: urgent-within (1 day,
+overdue included) and due-soon-within (7) are settings beside the slot caps,
+carried into the model like the caps are. `tier()` clamps the yellow window
+up to the red one so no setting can invert the tiers, and the domain lists'
+near-deadline boundary follows automatically — `nearDeadline` is defined
+through `tier()`, so the feed and the lists cannot disagree about "soon".
+The panel's head button becomes **Settings**, opening Obsidian's own tab on
+the plugin's page; the datatypes dialog keeps a row there plus its command.
+
 ---
 
 ## Implementation takeaways
