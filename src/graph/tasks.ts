@@ -16,6 +16,8 @@ import { fnv1a } from "./layout";
 import { Assignments, Datatype, Domain, Priorities, VaultSnapshot, fold } from "../types";
 
 const TASK_CATEGORY = "task";
+const ENTRY_CATEGORY = "entry";
+const IDEA_CATEGORY = "idea";
 
 /**
  * The urgency windows, in days from today, both configurable in settings.
@@ -236,4 +238,49 @@ export function applyOrder(paths: string[], saved: string[]): string[] {
   const ordered = saved.filter((p) => present.has(p));
   const placed = new Set(ordered);
   return [...ordered, ...paths.filter((p) => !placed.has(p))];
+}
+
+/**
+ * The expanded focus box's material, under one project: the tasks not yet
+ * started, and the entries and ideas that could be promoted into tasks.
+ *
+ * Explored work leaves every list — done is done whatever it was. Entries
+ * and ideas carry no status requirement, because most have none: fresh is
+ * the normal state of an idea. The rows carry the same shape, hue and tier
+ * the rest of the dashboard draws, so a promoted note simply changes list.
+ */
+export interface FocusDetail {
+  unexplored: TaskRow[];
+  entries: TaskRow[];
+  ideas: TaskRow[];
+}
+
+export function focusDetail(
+  snapshot: VaultSnapshot,
+  hierarchy: Hierarchy,
+  root: string,
+  builder: RowBuilder,
+  today: Date,
+): FocusDetail {
+  const unexplored: string[] = [], entries: string[] = [], ideas: string[] = [];
+  for (const path of hierarchy.descendants(root)) {
+    const note = snapshot.notes.get(path);
+    if (!note || note.status === "explored") continue;
+    if (isTask(note.categories)) {
+      if (note.status === "unexplored") unexplored.push(path);
+      continue; // a task already exploring is in the box's own list
+    }
+    const names = note.categories.map(fold);
+    if (names.includes(ENTRY_CATEGORY)) entries.push(path);
+    else if (names.includes(IDEA_CATEGORY)) ideas.push(path);
+  }
+  const byTitle = (a: string, b: string): number => {
+    const ta = snapshot.notes.get(a)!.title.toLowerCase(), tb = snapshot.notes.get(b)!.title.toLowerCase();
+    return ta.localeCompare(tb);
+  };
+  unexplored.sort(byTitle);
+  entries.sort(byTitle);
+  ideas.sort(byTitle);
+  const rows = (paths: string[]) => paths.map((p) => builder.row(p, today));
+  return { unexplored: rows(unexplored), entries: rows(entries), ideas: rows(ideas) };
 }

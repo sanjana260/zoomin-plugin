@@ -48,7 +48,9 @@ scaffolding, not thinking — as are sync-tool conflict copies.
 
 **Writes:** exactly **four frontmatter fields**, each through Obsidian's own
 frontmatter writer, so an edit is indistinguishable from one you made in the
-properties editor. No files are ever created, no other keys are touched.
+properties editor. One deliberate exception: the dashboard's quick-add
+*creates* a note (in the vault root, as a child of a focus project). No other
+files are ever created, no other keys are touched.
 
 | Field | Written as | Example |
 | --- | --- | --- |
@@ -365,6 +367,16 @@ to maintain. To be on it at all, a note must be a task (`categories: Task`).
 **Ticking a box** writes `status: Explored` — cascading to the subtree, like
 any status set. Unticking writes `status: Exploring`. The row strikes through
 in place until the next refresh, so a mis-click is undone by unticking.
+
+Each focus box **expands**: the underside lists the project's **unexplored
+tasks** (dimmer — not on the board yet) and its **entries** and **ideas**
+(any status short of Explored). Every row there carries a **+** that promotes
+it in place — datatype to Task, status to Exploring — moving it into the
+working list. At the bottom, a **quick-add** plants a brand-new note in the
+vault root as a child of the project: you give it a name, an optional
+deadline and datatype, and it is born `status: Exploring`, `Parent:` the
+project — in the working list the moment it exists. (Entries and ideas are
+matched by those category names, case-insensitive.)
 
 The practical setup rule: **a task shows up where you want it when it has the
 right category *and* the right status.** `categories: Task` puts it in the

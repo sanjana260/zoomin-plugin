@@ -16,17 +16,18 @@
 
 import { DOMAIN_HUES, Member, buildPayload, domainMembers, effectiveDomain, shapeIndex, shapeOf } from "./graph/build";
 import { EXCLUDED_TITLES, Hierarchy, TreeNode, buildHierarchy } from "./graph/hierarchy";
-import { RowBuilder, applyOrder, deadlinePaths, domainTaskPaths, exploringTasksUnder, stableShuffle, todayIso } from "./graph/tasks";
-import type { TaskRow, Urgency } from "./graph/tasks";
+import { RowBuilder, applyOrder, deadlinePaths, domainTaskPaths, exploringTasksUnder, focusDetail, stableShuffle, todayIso } from "./graph/tasks";
+import type { FocusDetail, TaskRow, Urgency } from "./graph/tasks";
 import { DEFAULT_URGENCY } from "./graph/tasks";
 export type { TaskRow, Urgency };
 import { Store } from "./state/store";
 import { Datatype, GraphPayload, LinkKind, Positions, STATUSES, Status, VaultSnapshot, fold } from "./types";
 import { categoryNames } from "./vault/categories";
 import { CATEGORY_DIR, CacheSource, buildSnapshot } from "./vault/snapshot";
-import { FrontmatterWriter, nextStatus, setCategory, setDeadline, setParent, setStatus } from "./vault/write";
+import { FrontmatterWriter, NoteCreator, deadlineValue, newChildNoteText, nextStatus, setCategory, setDeadline, setParent, setStatus } from "./vault/write";
 
 export type ChangeListener = (structural: boolean) => void;
+export type { FocusDetail };
 
 export interface SlotCaps {
   domainSlots: number;
@@ -113,8 +114,20 @@ export class ZoomInModel {
     private readonly source: CacheSource,
     public readonly store: Store,
     private readonly writer: FrontmatterWriter | null = null,
+    private readonly creator: NoteCreator | null = null,
   ) {
     store.knows = (path) => this.snapshot.notes.has(path);
+  }
+
+  /** Whether this model can create notes at all (a creator was wired in) —
+   *  the quick-add on the dashboard is the one thing that asks. */
+  get canCreate(): boolean {
+    return this.creator !== null;
+  }
+
+  private requireCreator(): NoteCreator {
+    if (!this.creator) throw new Error("ZoomIn cannot create notes here");
+    return this.creator;
   }
 
   /** Whether this model can write to the vault at all (a writer was wired in). */
@@ -741,6 +754,72 @@ export class ZoomInModel {
     note.deadline = value;
     this.emit(false);
     return { structural: false };
+  }
+
+  /**
+   * The expanded focus box's material under one project: its unexplored
+   * tasks, and the entries and ideas that could be promoted into work. Same
+   * builder as the dashboard's own rows, so hue, shape and tier agree.
+   */
+  focusDetail(projectPath: string, today: Date): FocusDetail {
+    const builder = new RowBuilder(this.snapshot, this.hierarchy, this.store.domains(), this.store.assignments(), this.store.datatypes(), this.urgency);
+    return focusDetail(this.snapshot, this.hierarchy, projectPath, builder, today);
+  }
+
+  /**
+   * Promote a note into active work: its category becomes Task and its
+   * status Exploring. Only the note itself moves — no cascade, this is the
+   * start of one thing, not a verdict on a subtree — and the category keeps
+   * the spelling and form the vault already uses for Task.
+   */
+  async promoteToTask(path: string): Promise<void> {
+    const writer = this.requireWriter();
+    const note = this.snapshot.notes.get(path);
+    if (!note) throw new Error(`no such note: ${path}`);
+    const { display, inFolder } = this.categoryCensus();
+    const name = display.get("task") ?? "Task";
+    const wikilink = this.categoryPrefersWikilink("task", inFolder);
+    await setCategory(writer, path, name, wikilink);
+    note.categories = [name];
+    await setStatus(writer, path, "exploring");
+    note.status = "exploring";
+    // The category can be a project datatype, so project-ness may have moved
+    // with it; re-derived from the patched snapshot, no rescan.
+    this.rebuild(false);
+  }
+
+  /**
+   * The quick-add: plant a new note in the vault's root as a child of the
+   * project, status Exploring, with the chosen category and deadline.
+   * Decision 50 widened the no-new-files contract for exactly this, so the
+   * name is checked before anything is written and the child is scanned in
+   * the moment it exists.
+   */
+  async createChildNote(projectPath: string, rawTitle: string, datatype: string | null, deadline: string | null): Promise<string> {
+    const creator = this.requireCreator();
+    const title = rawTitle.trim().replace(/\.md$/i, "");
+    if (!title) throw new Error("A note needs a name.");
+    if (!this.snapshot.notes.has(projectPath)) throw new Error(`no such note: ${projectPath}`);
+    const stem = labelFor(projectPath);
+    const parentTarget = this.stemIsAmbiguous(stem) ? projectPath.replace(/\.md$/, "") : stem;
+    let category: string | null = null;
+    let wikilink = false;
+    if (datatype && datatype.trim()) {
+      const { display, inFolder } = this.categoryCensus();
+      const key = fold(datatype.trim());
+      category = display.get(key) ?? datatype.trim();
+      wikilink = this.categoryPrefersWikilink(key, inFolder);
+    }
+    if (deadline) deadlineValue(deadline); // validated before anything is written
+    const path = title + ".md";
+    await creator.create(
+      path,
+      newChildNoteText({ status: "exploring", category, wikilink, deadline, parentTarget }),
+    );
+    // A new note is structure; the vault's own event would rescan us soon
+    // enough, but the dashboard should show the child in place now.
+    this.reload();
+    return path;
   }
 
   /** The layout settled. Kept in memory so a rebuild seeds from it; the

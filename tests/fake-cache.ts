@@ -8,7 +8,7 @@
 import type { CachedMetadata, EmbedCache, LinkCache } from "obsidian";
 import { buildSnapshot, CacheFile, CacheSource } from "../src/vault/snapshot";
 import type { VaultSnapshot } from "../src/types";
-import type { Frontmatter, FrontmatterWriter } from "../src/vault/write";
+import type { Frontmatter, FrontmatterWriter, NoteCreator } from "../src/vault/write";
 
 export interface NoteSpec {
   frontmatter?: Record<string, unknown>;
@@ -102,6 +102,21 @@ export function fakeWriter(files: Record<string, NoteSpec | string>): Frontmatte
       spec.frontmatter = spec.frontmatter ?? {};
       edit(spec.frontmatter as Frontmatter);
       writes.push([path, JSON.parse(JSON.stringify(spec.frontmatter))]);
+    },
+  };
+}
+
+/**
+ * A fake vault.create for the quick-add: records (path, content) pairs in
+ * order, refuses a collision the way the real vault does. Created notes are
+ * *not* added to the source — the model's rescan after a create is what
+ * would pick them up in production, and the tests assert on the records.
+ */
+export function fakeCreator(created: { path: string; content: string }[]): NoteCreator {
+  return {
+    async create(path, content) {
+      if (created.some((c) => c.path === path)) throw new Error(`a note named ${path} already exists`);
+      created.push({ path, content });
     },
   };
 }

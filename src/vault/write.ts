@@ -54,6 +54,48 @@ export function appWriter(app: App): FrontmatterWriter {
   };
 }
 
+/**
+ * Creating a note is a wider act than editing one — the dashboard's quick-add
+ * plants a child under a project — and decision 50 widened the contract for
+ * it, deliberately. One interface, like the writer above, so tests can fake
+ * the vault: create takes the whole file text, frontmatter and all.
+ */
+export interface NoteCreator {
+  create(path: string, content: string): Promise<void>;
+}
+
+export function appCreator(app: App): NoteCreator {
+  return {
+    async create(path, content) {
+      if (app.vault.getAbstractFileByPath(path)) throw new Error(`a note named ${path} already exists`);
+      await app.vault.create(path, content);
+    },
+  };
+}
+
+/**
+ * The file text for a fresh child of a project, in the forms the vault
+ * already uses (§write.ts's value renderers) — status capitalised, a
+ * one-item category list, an ISO deadline, the parent wikilinked and
+ * quoted the way Obsidian serialises it.
+ */
+export function newChildNoteText(parts: {
+  status: Status;
+  category: string | null;
+  wikilink: boolean;
+  deadline: string | null;
+  parentTarget: string;
+}): string {
+  const lines = ["---", "status: " + statusValue(parts.status)];
+  if (parts.category) {
+    lines.push("categories:");
+    lines.push(parts.wikilink ? `  - "[[${parts.category}]]"` : `  - ${parts.category}`);
+  }
+  if (parts.deadline) lines.push("deadline: " + deadlineValue(parts.deadline));
+  lines.push(`Parent: "[[${parts.parentTarget}]]"`);
+  return lines.join("\n") + "\n---\n";
+}
+
 // The vault writes these capitalised, and every one of the 220 notes that sets a
 // usable status agrees. A ZoomIn edit should look like the ones already there.
 export const STATUS_LABELS: Record<Status, string> = { unexplored: "Unexplored", exploring: "Exploring", explored: "Explored" };

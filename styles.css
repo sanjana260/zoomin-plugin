@@ -547,6 +547,51 @@
 .zoomin-focus-box .zoomin-task-list > .zoomin-task-row + .zoomin-task-row { margin-top: 0; }
 .zoomin-focus-box .zoomin-task-row { background: none; padding-left: 0; }
 .zoomin-focus-box .zoomin-drop-line { width: 2px; height: auto; align-self: stretch; margin: 2px 0; }
+
+/* The focus box's expanded underside: the work not yet moving, plus the raw
+   material entries and ideas are. Dimmer rows for unexplored — not on the
+   board yet; a plus on every row promotes it in one tap. */
+.zoomin-view .zoomin-focus-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; }
+.zoomin-focus-detail {
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid color-mix(in oklab, var(--hue, var(--ink-faint)) 30%, transparent);
+  display: grid;
+  gap: 8px;
+}
+.zoomin-view .zoomin-detail-label {
+  margin: 2px 0 0;
+  font-family: var(--font-monospace);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+.zoomin-task-row.zoomin-task-unexplored { opacity: 0.62; }
+.zoomin-view .zoomin-task-plus {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  color: var(--ink-faint);
+  background: none;
+  border: 1px solid transparent;
+  border-radius: var(--radius);
+}
+.zoomin-view .zoomin-task-plus:hover { color: var(--accent); border-color: var(--line); }
+.zoomin-view .zoomin-task-plus svg { width: 13px; height: 13px; }
+
+/* The quick-add: name, optional deadline, optional datatype, one button —
+   a child of the project, planted in the vault root. */
+.zoomin-quick-add { display: flex; align-items: center; gap: 6px; margin-top: 2px; }
+.zoomin-quick-add input[type="text"] { flex: 1; min-width: 0; font-size: 12px; }
+.zoomin-quick-add input[type="date"] { flex: none; width: 118px; font-size: 11px; }
+.zoomin-quick-add select { flex: none; max-width: 110px; font-size: 11px; }
+.zoomin-quick-add .zoomin-ghost { padding: 3px 9px; font-size: 11px; }
 .zoomin-task-row:hover { border-color: var(--line); }
 .zoomin-task-row[draggable="true"] { cursor: grab; }
 .zoomin-task-row.dragging { opacity: 0.4; cursor: grabbing; }

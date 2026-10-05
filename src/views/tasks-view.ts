@@ -11,15 +11,17 @@
  * until the next render rather than vanishing, so a mis-click is undoable.
  */
 
-import { ItemView, WorkspaceLeaf } from "obsidian";
+import { ItemView, WorkspaceLeaf, setIcon } from "obsidian";
 import type ZoomInPlugin from "../main";
 import type { FocusBox, TaskRow } from "../model";
 import type { TasksModelView as TasksData } from "../model";
-import { checkbox, el, errorMessage, shapeDot, swatch, toast } from "./ui";
+import { checkbox, discloseButton, el, errorMessage, shapeDot, swatch, toast } from "./ui";
 
 export const VIEW_TASKS = "zoomin-tasks";
 
 const TASK_DOMAINS_HIDDEN_KEY = "zoomin.task-domains-hidden";
+/** Which focus boxes show their underside — unexplored work and raw material. */
+const FOCUS_OPEN_KEY = "zoomin.focus-open";
 
 /** "3d", "today", "overdue 2d": the number is what you scan for, so it leads. */
 function dueLabel(row: TaskRow): string {
@@ -33,6 +35,7 @@ function dueLabel(row: TaskRow): string {
 export class TasksView extends ItemView {
   private unsubscribe: (() => void) | null = null;
   private taskDomainsHidden: Record<string, true> = {};
+  private focusOpen: Record<string, true> = {};
   /** Set while a tick's own model change is in flight, so the row stays
    *  struck instead of the whole list re-rendering under the pointer. */
   private holdRender = false;
@@ -65,6 +68,7 @@ export class TasksView extends ItemView {
 
   async onOpen(): Promise<void> {
     this.taskDomainsHidden = this.plugin.local.idSet(TASK_DOMAINS_HIDDEN_KEY);
+    this.focusOpen = this.plugin.local.idSet(FOCUS_OPEN_KEY);
     const root = this.contentEl;
     root.empty();
     root.addClass("zoomin-view", "zoomin-tasks");
@@ -282,11 +286,20 @@ export class TasksView extends ItemView {
     const head = el("div", "zoomin-focus-head");
     // Eyebrow: where this sits and how much is on the board, in the
     // instrument-panel voice; the project's name gets the display size.
+    const left = el("div");
     const eyebrow = el("div", "zoomin-focus-eyebrow");
     if (entry.project.domainName) eyebrow.appendChild(el("span", null, entry.project.domainName));
     eyebrow.appendChild(el("span", "zoomin-focus-open", open + " open"));
-    head.appendChild(eyebrow);
-    head.appendChild(el("h4", "zoomin-focus-title", entry.project.label));
+    left.appendChild(eyebrow);
+    left.appendChild(el("h4", "zoomin-focus-title", entry.project.label));
+    head.appendChild(left);
+    const expanded = !!this.focusOpen[entry.project.path];
+    head.appendChild(
+      discloseButton(expanded, (expanded ? "Hide" : "Show") + " unexplored work and raw material", () => {
+        this.plugin.local.toggleIn(FOCUS_OPEN_KEY, this.focusOpen, entry.project.path);
+        this.render();
+      }),
+    );
     box.appendChild(head);
 
     const list = el("ul", "zoomin-task-list");
@@ -294,7 +307,116 @@ export class TasksView extends ItemView {
     if (!entry.tasks.length) list.appendChild(el("li", "zoomin-hint", "Nothing exploring under " + entry.project.label + "."));
     this.makeSortable(list, "focus:" + entry.project.path);
     box.appendChild(list);
+
+    if (expanded) box.appendChild(this.focusDetailBox(entry));
     return box;
+  }
+
+  /**
+   * The expanded underside of a focus box: what is not moving yet. Unexplored
+   * tasks, then entries and ideas — each with a one-tap promotion to a task,
+   * and, when the plugin may create notes, a quick-add that plants a child
+   * under the project without leaving the dashboard.
+   */
+  private focusDetailBox(entry: FocusBox): HTMLElement {
+    const model = this.plugin.model;
+    const detail = model.focusDetail(entry.project.path, new Date());
+    const wrap = el("div", "zoomin-focus-detail");
+
+    const group = (label: string, rows: TaskRow[], dim: boolean): void => {
+      if (!rows.length) return;
+      wrap.appendChild(el("h5", "zoomin-detail-label", label));
+      const list = el("ul", "zoomin-task-list");
+      for (const row of rows) list.appendChild(this.detailRow(row, dim));
+      wrap.appendChild(list);
+    };
+    group("Unexplored", detail.unexplored, true);
+    group("Entries", detail.entries, false);
+    group("Ideas", detail.ideas, false);
+    if (!detail.unexplored.length && !detail.entries.length && !detail.ideas.length) {
+      wrap.appendChild(el("p", "zoomin-hint", "Nothing unexplored under " + entry.project.label + "."));
+    }
+
+    if (model.canCreate) wrap.appendChild(this.quickAdd(entry.project.path, entry.project.label));
+    return wrap;
+  }
+
+  /** A detail row: the dashboard's own row shape, plus the promotion button.
+   *  Not draggable — ordering is for work in motion, not material. */
+  private detailRow(row: TaskRow, dim: boolean): HTMLLIElement {
+    const item = this.taskRow(row, { draggable: false });
+    if (dim) item.addClass("zoomin-task-unexplored");
+    const plus = el("button", "zoomin-task-plus");
+    plus.type = "button";
+    plus.title = "Make this a task — datatype Task, status Exploring";
+    plus.setAttribute("aria-label", plus.title);
+    setIcon(plus, "plus");
+    plus.onclick = () => {
+      plus.disabled = true;
+      void this.plugin.model
+        .promoteToTask(row.path)
+        .catch((error) => {
+          plus.disabled = false;
+          toast(errorMessage(error));
+        });
+      // The promotion's own change re-renders the dashboard; the row leaves
+      // this list without another click.
+    };
+    item.appendChild(plus);
+    return item;
+  }
+
+  /** The quick-add: name, optional deadline, optional datatype — a child of
+   *  the project, planted in the vault root, Exploring from birth. */
+  private quickAdd(projectPath: string, projectLabel: string): HTMLElement {
+    const form = el("div", "zoomin-quick-add");
+    const name = document.createElement("input");
+    name.type = "text";
+    name.placeholder = "Add a child to " + projectLabel;
+    name.setAttribute("aria-label", "New child note name");
+    name.spellcheck = false;
+    const due = document.createElement("input");
+    due.type = "date";
+    due.setAttribute("aria-label", "Deadline (optional)");
+    const pick = document.createElement("select");
+    pick.setAttribute("aria-label", "Datatype");
+    for (const category of this.plugin.model.categories()) {
+      const option = document.createElement("option");
+      option.value = category.name;
+      option.textContent = category.name;
+      pick.appendChild(option);
+    }
+    // The dashboard is made of tasks; default the type to Task when the
+    // vault has one, so the common case is type-and-go.
+    pick.value = Array.from(pick.options).some((o) => o.value === "Task") ? "Task" : pick.value;
+    const add = el("button", "zoomin-ghost", "Add");
+    add.type = "button";
+
+    const submit = async (): Promise<void> => {
+      if (!name.value.trim()) return;
+      add.disabled = true;
+      try {
+        await this.plugin.model.createChildNote(projectPath, name.value, pick.value || null, due.value || null);
+        // The creation's reload re-renders the dashboard with the child in
+        // place; this form dies with the render, fresh for the next note.
+      } catch (error) {
+        add.disabled = false;
+        toast(errorMessage(error));
+      }
+    };
+    add.onclick = () => void submit();
+    name.addEventListener("keydown", (event) => {
+      if (event.key === "Enter") {
+        event.preventDefault();
+        void submit();
+      }
+    });
+
+    form.appendChild(name);
+    form.appendChild(due);
+    form.appendChild(pick);
+    form.appendChild(add);
+    return form;
   }
 
   // One chip per priority domain: its name, its colour, and how many rows in

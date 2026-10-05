@@ -64,11 +64,14 @@ display face falls back gracefully off macOS).
 Four frontmatter fields — `status:`, `Parent:`, `categories:`, `deadline:` —
 each written through Obsidian's own frontmatter writer, so an edit is
 indistinguishable from one made in the properties editor. Clearing a field
-leaves the key with an empty value, as the vault's own empties do. No files are
-created, no other keys are touched. Everything else the plugin knows — domains,
-assignments, slots and their history, datatypes, project rulings, task order —
-lives in the plugin's `data.json` and travels with the vault (node positions
-and panel folds stay per-device).
+leaves the key with an empty value, as the vault's own empties do. The one
+deliberate exception: the task dashboard's quick-add **creates a note** in
+the vault root when you ask it to — a child of a focus project, status
+Exploring, with the datatype and deadline you give it. No other files are
+created and no other keys are touched. Everything else the plugin knows —
+domains, assignments, slots and their history, datatypes, project rulings,
+task order — lives in the plugin's `data.json` and travels with the vault
+(node positions and panel folds stay per-device).
 
 ## Development
 

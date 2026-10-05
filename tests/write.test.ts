@@ -9,7 +9,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { ZoomInModel } from "../src/model";
 import { Store, emptyStore } from "../src/state/store";
 import { categoryValue, deadlineValue, nextStatus, parentValue, statusValue } from "../src/vault/write";
-import { NoteSpec, fakeSource, fakeWriter, note } from "./fake-cache";
+import { NoteSpec, fakeCreator, fakeSource, fakeWriter, note } from "./fake-cache";
 
 let files: Record<string, NoteSpec | string>;
 let writer: ReturnType<typeof fakeWriter>;
@@ -169,5 +169,73 @@ describe("without a writer", () => {
     readOnly.reload();
     expect(readOnly.canWrite).toBe(false);
     await expect(readOnly.setStatus("Work.md")).rejects.toThrow("cannot write");
+  });
+});
+
+describe("the focus box's promotion and quick-add", () => {
+  let created: { path: string; content: string }[];
+  let building: ZoomInModel;
+
+  beforeEach(() => {
+    created = [];
+    building = new ZoomInModel(fakeSource(files), new Store(emptyStore(), () => {}), writer, fakeCreator(created));
+    building.reload();
+  });
+
+  it("promotes an entry to a task in place, with the vault's own Task form", async () => {
+    await building.promoteToTask("Memo.md");
+    const frontmatter = fm("Memo.md");
+    // Bare "Task": the vault's commonest spelling, and the vault writes Task bare.
+    expect(frontmatter.categories).toEqual(["Task"]);
+    expect(frontmatter.status).toBe("Exploring");
+    expect(frontmatter.Parent).toBe("[[Work]]"); // untouched
+    const note = building.snapshot.notes.get("Memo.md")!;
+    expect(note.status).toBe("exploring");
+    expect(note.categories).toEqual(["Task"]);
+  });
+
+  it("plants a child in the vault root: exploring, typed, dated, parented", async () => {
+    const path = await building.createChildNote("Work.md", "Draft spec", "Task", "2026-10-10");
+    expect(path).toBe("Draft spec.md");
+    expect(created).toEqual([{ path: "Draft spec.md", content: expect.any(String) }]);
+    const text = created[0].content;
+    expect(text).toContain("status: Exploring");
+    expect(text).toContain("categories:\n  - Task");
+    expect(text).toContain("deadline: 2026-10-10");
+    expect(text).toContain('Parent: "[[Work]]"');
+  });
+
+  it("writes no category or deadline keys when none are given", async () => {
+    await building.createChildNote("Work.md", "Bare child", null, null);
+    const text = created[0].content;
+    expect(text).not.toContain("categories:");
+    expect(text).not.toContain("deadline:");
+    expect(text).toContain('Parent: "[[Work]]"');
+  });
+
+  it("refuses a second note with the same name", async () => {
+    await building.createChildNote("Work.md", "Draft spec", null, null);
+    await expect(building.createChildNote("Work.md", "Draft spec", null, null)).rejects.toThrow(/already exists/);
+  });
+
+  it("refuses an empty name", async () => {
+    await expect(building.createChildNote("Work.md", "   ", null, null)).rejects.toThrow(/needs a name/);
+    expect(created).toHaveLength(0);
+  });
+
+  it("validates the deadline before anything is written", async () => {
+    await expect(building.createChildNote("Work.md", "Dated", "Task", "soon")).rejects.toThrow(/not a date/);
+    expect(created).toHaveLength(0);
+  });
+
+  it("keeps the parent a path when the stem is ambiguous", async () => {
+    // "Memo" is ambiguous — Memo.md and Notes/Memo.md — so a child of Memo
+    // must carry the path, not the bare stem.
+    await building.createChildNote("Notes/Memo.md", "Memo child", null, null);
+    expect(created[0].content).toContain('Parent: "[[Notes/Memo]]"');
+  });
+
+  it("refuses to create without a creator", async () => {
+    await expect(model.createChildNote("Work.md", "Nope", null, null)).rejects.toThrow("cannot create");
   });
 });

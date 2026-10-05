@@ -19,7 +19,7 @@ import { DEFAULT_SETTINGS, ZoomInSettingTab, ZoomInSettings } from "./settings";
 import { LocalState } from "./state/local";
 import { Store, StoreData, upgrade } from "./state/store";
 import { appSource } from "./vault/snapshot";
-import { STATUS_LABELS, appWriter } from "./vault/write";
+import { STATUS_LABELS, appCreator, appWriter } from "./vault/write";
 import { shapeDot } from "./views/ui";
 import { DatatypesModal } from "./views/datatypes-modal";
 import { DomainModal } from "./views/domain-modal";
@@ -67,7 +67,7 @@ export default class ZoomInPlugin extends Plugin {
       this.local.savePositions(raw.positions);
       this.scheduleSave();
     }
-    this.model = new ZoomInModel(appSource(this.app), store, appWriter(this.app));
+    this.model = new ZoomInModel(appSource(this.app), store, appWriter(this.app), appCreator(this.app));
     this.model.positions = this.local.positions();
     this.applySettings();
 
