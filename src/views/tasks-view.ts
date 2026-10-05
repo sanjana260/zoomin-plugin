@@ -144,7 +144,7 @@ export class TasksView extends ItemView {
     }
   }
 
-  private taskRow(row: TaskRow, options: { draggable?: boolean; showProject?: boolean }): HTMLLIElement {
+  private taskRow(row: TaskRow, options: { draggable?: boolean; showProject?: boolean; checkbox?: boolean }): HTMLLIElement {
     const item = el("li", "zoomin-task-row" + (row.status === "explored" ? " done" : "") + (row.tier ? " tier-" + row.tier : ""));
     item.dataset.path = row.path;
     // The checkbox ring takes the row's own colour: the domain's hue in the
@@ -152,11 +152,15 @@ export class TasksView extends ItemView {
     const tint = swatch(row.hue);
     if (tint) item.style.setProperty("--hue", tint);
 
-    const box = checkbox("zoomin-task-check");
-    box.checked = row.status === "explored";
-    box.setAttribute("aria-label", "Done: " + row.label);
-    box.onchange = () => void this.setTaskStatus(item, box, row, box.checked);
-    item.appendChild(box);
+    // The underside's rows carry no checkbox: their one action is the plus —
+    // promote it, don't tick it.
+    if (options.checkbox !== false) {
+      const box = checkbox("zoomin-task-check");
+      box.checked = row.status === "explored";
+      box.setAttribute("aria-label", "Done: " + row.label);
+      box.onchange = () => void this.setTaskStatus(item, box, row, box.checked);
+      item.appendChild(box);
+    }
 
     item.appendChild(shapeDot(row.shape, row.hue));
 
@@ -344,7 +348,7 @@ export class TasksView extends ItemView {
   /** A detail row: the dashboard's own row shape, plus the promotion button.
    *  Not draggable — ordering is for work in motion, not material. */
   private detailRow(row: TaskRow, dim: boolean): HTMLLIElement {
-    const item = this.taskRow(row, { draggable: false });
+    const item = this.taskRow(row, { draggable: false, checkbox: false });
     if (dim) item.addClass("zoomin-task-unexplored");
     const plus = el("button", "zoomin-task-plus");
     plus.type = "button";
