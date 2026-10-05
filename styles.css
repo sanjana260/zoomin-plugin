@@ -559,17 +559,31 @@
   display: flex;
   flex-direction: column;
   gap: 10px;
+  /* The underside is a panel, never a page: bounded once, so the quick-add
+     below the columns is visible the moment the box is expanded — no list,
+     however long, can push it out of view. */
+  max-height: 340px;
 }
 /* Columns while the leaf has room — auto-fit stacks them when it hasn't.
-   Each column scrolls on its own under a pinned label; the quick-add sits
-   outside them, so no list can push it out of reach. */
+   The grid is the shrinkable region: bounded by the panel above it, it hands
+   its height down to the columns, and each column's list scrolls inside that
+   bound under its pinned label. min-height: 0 all the way down — without it
+   a flex/grid item refuses to shrink below its content and nothing scrolls. */
 .zoomin-detail-groups {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
   gap: 4px 16px;
-  align-items: start;
 }
-.zoomin-detail-group { display: flex; flex-direction: column; min-width: 0; }
+.zoomin-detail-group {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
 .zoomin-view .zoomin-detail-label {
   flex: none;
   margin: 0 0 4px;
@@ -581,9 +595,10 @@
   color: var(--ink-faint);
 }
 .zoomin-focus-box .zoomin-detail-list {
+  flex: 1 1 auto;
+  min-height: 0;
   display: block;
   overflow-y: auto;
-  max-height: 240px;
   padding-right: 2px;
   overscroll-behavior: contain;
 }
