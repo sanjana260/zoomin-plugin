@@ -327,20 +327,29 @@ export class TasksView extends ItemView {
     const detail = model.focusDetail(entry.project.path, new Date());
     const wrap = el("div", "zoomin-focus-detail");
 
+    // Three columns when the leaf has the room, stacked when it hasn't —
+    // auto-fit decides. Each column scrolls on its own, its label pinned
+    // above it, so a long ideas list never pushes the quick-add away.
+    const groups = el("div", "zoomin-detail-groups");
     const group = (label: string, rows: TaskRow[], dim: boolean): void => {
       if (!rows.length) return;
-      wrap.appendChild(el("h5", "zoomin-detail-label", label));
-      const list = el("ul", "zoomin-task-list");
+      const column = el("div", "zoomin-detail-group");
+      column.appendChild(el("h5", "zoomin-detail-label", label));
+      const list = el("ul", "zoomin-task-list zoomin-detail-list");
       for (const row of rows) list.appendChild(this.detailRow(row, dim));
-      wrap.appendChild(list);
+      column.appendChild(list);
+      groups.appendChild(column);
     };
     group("Unexplored", detail.unexplored, true);
     group("Entries", detail.entries, false);
     group("Ideas", detail.ideas, false);
-    if (!detail.unexplored.length && !detail.entries.length && !detail.ideas.length) {
+    if (!groups.children.length) {
       wrap.appendChild(el("p", "zoomin-hint", "Nothing unexplored under " + entry.project.label + "."));
+    } else {
+      wrap.appendChild(groups);
     }
 
+    // Pinned under the columns, whatever their lists are doing.
     if (model.canCreate) wrap.appendChild(this.quickAdd(entry.project.path, entry.project.label));
     return wrap;
   }

@@ -556,11 +556,23 @@
   margin-top: 12px;
   padding-top: 10px;
   border-top: 1px solid color-mix(in oklab, var(--hue, var(--ink-faint)) 30%, transparent);
-  display: grid;
-  gap: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
 }
+/* Columns while the leaf has room — auto-fit stacks them when it hasn't.
+   Each column scrolls on its own under a pinned label; the quick-add sits
+   outside them, so no list can push it out of reach. */
+.zoomin-detail-groups {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 4px 16px;
+  align-items: start;
+}
+.zoomin-detail-group { display: flex; flex-direction: column; min-width: 0; }
 .zoomin-view .zoomin-detail-label {
-  margin: 2px 0 0;
+  flex: none;
+  margin: 0 0 4px;
   font-family: var(--font-monospace);
   font-size: 10px;
   font-weight: 600;
@@ -568,6 +580,14 @@
   text-transform: uppercase;
   color: var(--ink-faint);
 }
+.zoomin-focus-box .zoomin-detail-list {
+  display: block;
+  overflow-y: auto;
+  max-height: 240px;
+  padding-right: 2px;
+  overscroll-behavior: contain;
+}
+.zoomin-focus-box .zoomin-detail-list > .zoomin-task-row { margin-top: 2px; }
 .zoomin-task-row.zoomin-task-unexplored { opacity: 0.62; }
 .zoomin-view .zoomin-task-plus {
   display: inline-flex;
