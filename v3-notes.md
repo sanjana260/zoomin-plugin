@@ -375,6 +375,17 @@ The windows read inclusively — urgent within 1 coloured today *and* tomorrow
 window when N is under it, not equal (decision 49): urgent 1 = today only,
 due-soon 7 = tomorrow through six days out, overdue always red.
 
+### The focus box expands: backlog, material, and a quick-add (`1e05dd2`)
+The focus box's underside holds what is not moving yet: the project's
+unexplored tasks (dimmer), entries, ideas — explored work leaves every list —
+each row with a one-tap promotion (category to Task via the census, status to
+Exploring, no cascade), and, at the bottom, a quick-add that creates a child
+note in the vault root: name, optional deadline and datatype, born Exploring,
+parent the project (decision 50 — the first deliberate widening of the
+no-new-files contract, kept honest by a creator interface as narrow as the
+writer's, a collision check, the value renderers, and a rescan the moment the
+child lands).
+
 ---
 
 ## Implementation takeaways
